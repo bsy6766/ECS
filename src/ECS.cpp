@@ -258,10 +258,12 @@ const bool ECS::Manager::hasComponent(Entity* e, const std::type_info & t)
 	const CID cId = this->getCIDFromTypeInfo(t);
 	if (cId != INVALID_CID)
 	{
-		return true;
+		// This CID exists. Check if entity has it
+        
 	}
 	else
 	{
+        // This CID doesn't exists yet.
 		return false;
 	}
 }
@@ -361,7 +363,7 @@ const bool ECS::Manager::addComponent(Entity* e, const std::type_info& t, Compon
 	return true;
 }
 
-const bool ECS::Manager::removeComponent(Entity * e, const std::type_info & t)
+const bool ECS::Manager::removeComponents(Entity * e, const std::type_info & t)
 {
 	return false;
 }

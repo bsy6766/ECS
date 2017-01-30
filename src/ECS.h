@@ -146,105 +146,7 @@ namespace ECS
 		// Get how many entities are active in this pool
 		const unsigned int getEntityCount(const bool onlyAlive = true);
 	};
-
-	/**
-	*	@class Entity
-	*	@brief Entity is simply an pack of numbers.
-	*	@note Entity doesn't carries Components.
-	*/
-	class Entity
-	{
-	private:
-		friend class Manager;
-		friend class EntityPool;
-		friend class Deleter<Entity>;
-	private:
-		// Constructor
-		Entity();
-
-		// User can't call delete on entity. Must call kill.
-		~Entity() = default;
-
-		// Disable all other constructors.
-		Entity(const Entity& arg) = delete;								// Copy constructor
-		Entity(const Entity&& arg) = delete;							// Move constructor
-		Entity& operator=(const Entity& arg) = delete;					// Assignment operator
-		Entity& operator=(const Entity&& arg) = delete;					// Move operator
-
-		// Signature.
-		Signature signature;
-
-		// Component Index map
-		std::unordered_map<CID, std::set<CINDEX>> componentIndicies;
-
-		// ID counter. Starts from 0
-		static EID idCounter;
-
-		// ID of entity. increases till 4294967295 (0xffffffff) then wrapped to 0. 
-		EID eId;
-
-		// Index of entity pool for fast access. This is fixed.
-		EINDEX eIndex;
-
-		// If entity is only visible if it's alive. Dead entities will not be queried or accessible.
-		bool alive;
-
-		// Revive this entity and get ready to use
-		void revive();
-
-		// Wrap idcounter
-		void wrapIdCounter();
-
-		// get CINDEX by CID
-		void getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies);
-
-		const bool addCINDEXToCID(const CID cId, const CINDEX cIndex);
-	public:
-		// Kill entity. Once this is called, this entity will not be functional anymore.
-		void kill();
-
-		// Get entity Id
-		const EID getEntityId();
-
-		// Check if this entity is alive
-		const bool isAlive();
-
-		template<class T>
-		const bool hasComponent()
-		{
-			Manager* m = Manager::getInstance();
-			return m->hasComponent(this, std::typeid(T));
-		}
-
-		template<class T>
-		Component* getComponent()
-		{
-			Manager* m = Manager::getInstance();
-			return m->getComponent(this, std::typeid(T));
-		}
-
-		template<class T>
-		const bool addComponent()
-		{
-			Manager* m = Manager::getInstance();
-			return m->addComponent(this, std::typeid(T), new T());
-		}
-
-		template<class T>
-		const bool addComponent(Component* component)
-		{
-			Manager* m = Manager::getInstance();
-			return m->addComponent(this, std::typeid(T), component);
-		}
-
-		template<class T>
-		const bool removeComponent()
-		{
-			Manager* m = Manager::getInstance();
-			return m->removeComponent(this, typeid(T));
-		}
-	};
-
+    
 	/**
 	*	@class Manager
 	*	@brief The manager class that manages entire ECS.
@@ -282,14 +184,25 @@ namespace ECS
 		const bool hasPoolName(const std::string& name);
 
 		// Send error
-		void sendError(const ERROR_CODE errorCode);
-
-		const CID getCIDFromTypeInfo(const std::type_info& t);
-		const bool hasComponent(Entity* e, const std::type_info& t);
-		Component* getComponent(Entity* e, const std::type_info& t);
-		std::vector<Component*> getComponents(Entity* e, const std::type_info& t);
-		const bool addComponent(Entity* e, const std::type_info& t, Component* c);
-		const bool removeComponent(Entity* e, const std::type_info& t);
+        void sendError(const ERROR_CODE errorCode);
+        
+        // get CID from type info
+        const CID getCIDFromTypeInfo(const std::type_info& t);
+        
+        // Check if entity has component
+        const bool hasComponent(Entity* e, const std::type_info& t);
+        
+        // Get component.
+        Component* getComponent(Entity* e, const std::type_info& t);
+        
+        // Get components
+        std::vector<Component*> getComponents(Entity* e, const std::type_info& t);
+        
+        // Add component to entity
+        const bool addComponent(Entity* e, const std::type_info& t, Component* c);
+        
+        // Remove compoent from entity
+        const bool removeComponents(Entity* e, const std::type_info& t);
 	public:
 		// Get instance.
 		static Manager* getInstance();
@@ -352,11 +265,167 @@ namespace ECS
 		*	@see Manager::DEFAULT_POOL_NAME
 		*	@return Entity if found. Else, nullptr.
 		*/
-		Entity* getEntityById(const EID entityId, const std::string& poolName = Manager::DEFAULT_POOL_NAME);
+        Entity* getEntityById(const EID entityId, const std::string& poolName = Manager::DEFAULT_POOL_NAME);
+        
+        template<class T>
+        const bool hasComponent(Entity* e)
+        {
+            return hasComponent(e, typeid(T));
+        }
+        
+        template<class T>
+        T* getComponent(Entity* e)
+        {
+            return dynamic_cast<T*>(getComponent(e, typeid(T)));
+        }
+        
+        template<class T>
+        std::vector<T*> getComponents(Entity* e)
+        {
+            std::vector<T*> ret;
+            std::vector<Component*> component = getComponents(e, typeid(T));
+            for(auto c : components)
+            {
+                ret.push_back(dynamic_cast<T*>(c));
+            }
+            
+            return ret;
+        }
+        
+        template<class T>
+        const bool addComponent(Entity* e)
+        {
+            return addComponent(e, typeid(T), new T());
+        }
+        
+        template<class T>
+        const bool addComponent(Entity* e, Component* c)
+        {
+            return addComponent(e, typeid(T), c);
+        }
+        
+        template<class T>
+        const bool removeComponents(Entity* e)
+        {
+            return removeComponents(e, typeid(T));
+        }
+        
+        /**
+         *  @name hasComponent
+         *  @brief Check if the entity has component
+         *  @
+         */
 
 		// Error callback. 
 		std::function<void(const ERROR_CODE, const std::string&)> errorCallback;
 	};
+    
+    
+    /**
+     *	@class Entity
+     *	@brief Entity is simply an pack of numbers.
+     *	@note Entity doesn't carries Components.
+     */
+    class Entity
+    {
+    private:
+        friend class Manager;
+        friend class EntityPool;
+        friend class Deleter<Entity>;
+    private:
+        // Constructor
+        Entity();
+        
+        // User can't call delete on entity. Must call kill.
+        ~Entity() = default;
+        
+        // Disable all other constructors.
+        Entity(const Entity& arg) = delete;								// Copy constructor
+        Entity(const Entity&& arg) = delete;							// Move constructor
+        Entity& operator=(const Entity& arg) = delete;					// Assignment operator
+        Entity& operator=(const Entity&& arg) = delete;					// Move operator
+        
+        // Signature.
+        Signature signature;
+        
+        // Component Index map
+        std::unordered_map<CID, std::set<CINDEX>> componentIndicies;
+        
+        // ID counter. Starts from 0
+        static EID idCounter;
+        
+        // ID of entity. increases till 4294967295 (0xffffffff) then wrapped to 0.
+        EID eId;
+        
+        // Index of entity pool for fast access. This is fixed.
+        EINDEX eIndex;
+        
+        // If entity is only visible if it's alive. Dead entities will not be queried or accessible.
+        bool alive;
+        
+        // Revive this entity and get ready to use
+        void revive();
+        
+        // Wrap idcounter
+        void wrapIdCounter();
+        
+        // get CINDEX by CID
+        void getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies);
+        
+        const bool addCINDEXToCID(const CID cId, const CINDEX cIndex);
+    public:
+        // Kill entity. Once this is called, this entity will not be functional anymore.
+        void kill();
+        
+        // Get entity Id
+        const EID getEntityId();
+        
+        // Check if this entity is alive
+        const bool isAlive();
+        
+        // Check if Entity has Component
+        template<class T>
+        const bool hasComponent()
+        {
+            Manager* m = Manager::getInstance();
+            return m->hasComponent<T>(this);
+        }
+        
+        template<class T>
+        T* getComponent()
+        {
+            Manager* m = Manager::getInstance();
+            return m->getComponents<T>(this);
+        }
+        
+        template<class T>
+        std::vector<T*> getComponents(Entity* e)
+        {
+            Manager* m = Manager::getInstance();
+            return m->getComponents<T>(this);
+        }
+        
+        template<class T>
+        const bool addComponent(Entity* e)
+        {
+            Manager* m = Manager::getInstance();
+            return m->addComponent<T>(this);
+        }
+        
+        template<class T>
+        const bool addComponent(Entity* e, Component* c)
+        {
+            Manager* m = Manager::getInstance();
+            return m->addComponent<T>(this, c);
+        }
+        
+        template<class T>
+        const bool removeComponents(Entity* e)
+        {
+            Manager* m = Manager::getInstance();
+            return m->removeComponents<T>(this);
+        }
+    };
 }
 
 #endif
