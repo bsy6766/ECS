@@ -2,37 +2,37 @@
 
 using namespace ECS;
 
-std::unique_ptr<Manager, ECS::Deleter<Manager>> Manager::instance = nullptr;
-const std::string Manager::DEFAULT_POOL_NAME = "DEFAULT";
+std::unique_ptr<Manager, ECS::Deleter<Manager>> ECS::Manager::instance = nullptr;
+const std::string ECS::Manager::DEFAULT_POOL_NAME = "DEFAULT";
 
-Manager::Manager()
+ECS::Manager::Manager()
 {
 	// Create default entity pool
-	this->entityPools.push_back(std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>(new EntityPool(Manager::DEFAULT_POOL_NAME), ECS::Deleter<EntityPool>()));
+	this->entityPools.push_back(std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>(new EntityPool(ECS::Manager::DEFAULT_POOL_NAME), ECS::Deleter<EntityPool>()));
 }
 
-Manager::~Manager()
+ECS::Manager::~Manager()
 {
 	// Unique ptr will release all for us
 	this->entityPools.clear();
 }
 
-Manager* Manager::getInstance()
+Manager* ECS::Manager::getInstance()
 {
-	if (Manager::instance == nullptr)
+	if (ECS::Manager::instance == nullptr)
 	{
-		Manager::instance = std::unique_ptr<Manager, ECS::Deleter<Manager>>(new Manager(), ECS::Deleter<Manager>());
+		ECS::Manager::instance = std::unique_ptr<Manager, ECS::Deleter<Manager>>(new Manager(), ECS::Deleter<Manager>());
 	}
 
-	return Manager::instance.get();
+	return ECS::Manager::instance.get();
 }
 
-void Manager::deleteInstance()
+void ECS::Manager::deleteInstance()
 {
-	if (Manager::instance != nullptr)
+	if (ECS::Manager::instance != nullptr)
 	{
-		Manager* managerPtr = Manager::instance.release();
-		Manager::instance = nullptr;
+		Manager* managerPtr = ECS::Manager::instance.release();
+		ECS::Manager::instance = nullptr;
 		if (managerPtr != nullptr)
 		{
 			delete managerPtr;
@@ -41,7 +41,7 @@ void Manager::deleteInstance()
 	}
 }
 
-void Manager::sendError(const ERROR_CODE errorCode)
+void ECS::Manager::sendError(const ERROR_CODE errorCode)
 {
 	if (this->errorCallback != nullptr)
 	{
@@ -49,7 +49,7 @@ void Manager::sendError(const ERROR_CODE errorCode)
 		switch (errorCode)
 		{
 		case ECS::ERROR_CODE::ECS_INVALID_POOL_NAME:
-			msg = "ECS_ERROR: EntityPool name can't be empty or \"" + Manager::DEFAULT_POOL_NAME + "\".";
+			msg = "ECS_ERROR: EntityPool name can't be empty or \"" + ECS::Manager::DEFAULT_POOL_NAME + "\".";
 			break;
 		case ECS::ERROR_CODE::ECS_DUPLICATED_POOL_NAME:
 			msg = "ECS_ERROR: There is a pool already with the same name.";
@@ -83,7 +83,7 @@ const bool ECS::Manager::hasPoolName(const std::string & name)
 
 const bool ECS::Manager::createEntityPool(const std::string& name, const int maxSize)
 {
-	if (name.empty() || name == Manager::DEFAULT_POOL_NAME)
+	if (name.empty() || name == ECS::Manager::DEFAULT_POOL_NAME)
 	{
 		// Pool name can't be empty or default
 		this->sendError(ERROR_CODE::ECS_INVALID_POOL_NAME);
@@ -99,11 +99,12 @@ const bool ECS::Manager::createEntityPool(const std::string& name, const int max
 
 	// Create new
 	this->entityPools.push_back(std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>(new EntityPool(name, maxSize), ECS::Deleter<EntityPool>()));
+	return true;
 }
 
 const bool ECS::Manager::deleteEntityPool(const std::string& name)
 {
-	if (name.empty() || name == Manager::DEFAULT_POOL_NAME)
+	if (name.empty() || name == ECS::Manager::DEFAULT_POOL_NAME)
 	{
 		// Can't delete with empty pool name or default name
 		this->sendError(ERROR_CODE::ECS_DUPLICATED_POOL_NAME);
@@ -238,10 +239,137 @@ Entity* ECS::Manager::getEntityById(const EID entityId, const std::string& poolN
 	return nullptr;
 }
 
+const CID ECS::Manager::getCIDFromTypeInfo(const std::type_info& t)
+{
+	const std::type_index typeIndex = std::type_index(t);
+	auto find_it = this->CIDMap.find(typeIndex);
+	if (find_it != this->CIDMap.end())
+	{
+		return find_it->second;
+	}
+	else
+	{
+		return INVALID_CID;
+	}
+}
+
+const bool ECS::Manager::hasComponent(Entity* e, const std::type_info & t)
+{
+	const CID cId = this->getCIDFromTypeInfo(t);
+	if (cId != INVALID_CID)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+Component* ECS::Manager::getComponent(Entity* e, const std::type_info& t)
+{
+	const CID cId = this->getCIDFromTypeInfo(t);
+	if (cId != INVALID_CID)
+	{
+		std::set<CINDEX> cIndicies;
+		e->getCINDEXByCID(cId, cIndicies);
+		if (cIndicies.empty())
+		{
+			return nullptr;
+		}
+		else
+		{
+			try
+			{
+				// Just return first one becuse this isn't getCompoents
+				return this->components.at(cId).at(*cIndicies.begin()).get();
+			}
+			catch (...)
+			{
+				return nullptr;
+			}
+		}
+	}
+	else
+	{
+		return nullptr;
+	}
+}
+
+std::vector<Component*> ECS::Manager::getComponents(Entity* e, const std::type_info& t)
+{
+	std::vector<Component*> ret;
+
+	const CID cId = this->getCIDFromTypeInfo(t);
+	if (cId != INVALID_CID)
+	{
+		std::set<CINDEX> cIndicies;
+		e->getCINDEXByCID(cId, cIndicies);
+		if (cIndicies.empty())
+		{
+			return ret;
+		}
+		else
+		{
+			try
+			{
+				// Just return first one becuse this isn't getCompoents
+				std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>& components = this->components.at(cId);
+
+				for (auto& component : components)
+				{
+					ret.push_back(component.get());
+				}
+
+				return ret;
+			}
+			catch (...)
+			{
+				return ret;
+			}
+		}
+	}
+	else
+	{
+		return ret;
+	}
+}
+
+const bool ECS::Manager::addComponent(Entity* e, const std::type_info& t, Component* c)
+{
+	if (c == nullptr) return false;
+
+	const CID cId = this->getCIDFromTypeInfo(t);
+	if (cId != INVALID_CID)
+	{
+		// This component type was added before.
+		try
+		{
+			this->components.at(cId).push_back(std::unique_ptr<Component, ComponentDeleter<Component>>(c, ComponentDeleter<Component>()));
+			const CINDEX cIndex = this->components.at(cId).size();
+			c->id = cId;
+		}
+		catch (...)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		// This component never had added. 
+	}
+	return true;
+}
+
+const bool ECS::Manager::removeComponent(Entity * e, const std::type_info & t)
+{
+	return false;
+}
+
 
 //============================================================================================
 
-EntityPool::EntityPool(const std::string& name, const unsigned int maxSize) 
+ECS::EntityPool::EntityPool(const std::string& name, const unsigned int maxSize) 
 : maxPoolSize(maxSize)
 {
 	// Allocate entities
@@ -249,13 +377,13 @@ EntityPool::EntityPool(const std::string& name, const unsigned int maxSize)
 	{
 		this->pool.push_back(std::unique_ptr<ECS::Entity, ECS::Deleter<Entity>>(new Entity(), ECS::Deleter<Entity>()));
 		this->pool.back()->alive = false;
-		this->pool.back()->eId = ++Entity::idCounter;
+		this->pool.back()->eId = ++ECS::Entity::idCounter;
 		this->pool.back()->eIndex = i;
 		this->nextIndicies.push(i);
 	}
 }
 
-EntityPool::~EntityPool()
+ECS::EntityPool::~EntityPool()
 {
 	// unique ptr will release for us
 	pool.clear();
@@ -290,39 +418,88 @@ const unsigned int ECS::EntityPool::getEntityCount(const bool onlyAlive)
 
 //============================================================================================
 
-EID Entity::idCounter = 0;
+EID ECS::Entity::idCounter = 0;
 
-Entity::Entity()
+ECS::Entity::Entity()
 : alive(false)
-, eId(++Entity::idCounter)
+, eId(++ECS::Entity::idCounter)
 , eIndex(-1)
+, signature(0)
 {
 	this->wrapIdCounter();
 }
 
-// Really nothing to call on death of instance.
-Entity::~Entity() {}
-
 void ECS::Entity::wrapIdCounter()
 {
-	if (Entity::idCounter >= 0xffffffff)
+	if (ECS::Entity::idCounter >= ECS::MAX_EID)
 	{
 		// id Counter reached max number. Wrap to 0. 
 		// This means user created more 4294967295 entities, which really doesn't happen all that much.
-		Entity::idCounter = 0;
+		ECS::Entity::idCounter = 0;
 	}
+}
+
+void ECS::Entity::getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies)
+{
+	try
+	{
+		for (auto index : this->componentIndicies.at(cId))
+		{
+			cIndicies.insert(index);
+		}
+	}
+	catch (...)
+	{
+		return;
+	}
+}
+
+const bool ECS::Entity::addCINDEXToCID(const CID cId, const CINDEX cIndex)
+{
+	return true;
 }
 
 void ECS::Entity::revive()
 {
 	this->alive = true;
-	this->eId = ++Entity::idCounter;
+	this->eId = ++ECS::Entity::idCounter;
 	this->wrapIdCounter();
 }
 
-void Entity::kill()
+void ECS::Entity::kill()
 {
 	// Wipe everything
 	this->alive = false;
 	this->eId = -1;
+}
+
+const EID ECS::Entity::getEntityId()
+{
+	return this->eId;
+}
+
+const bool ECS::Entity::isAlive()
+{
+	return this->alive;
+}
+
+//============================================================================================
+
+CID ECS::Component::idCounter = 0;
+
+Component::Component() 
+: id(INVALID_CID) 
+{}
+
+void Component::wrapIdCounter()
+{
+	if (Component::idCounter >= INVALID_CID)
+	{
+		Component::idCounter = 0;
+	}
+}
+
+const CID ECS::Component::getId()
+{
+	return this->id;
 }

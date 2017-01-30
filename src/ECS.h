@@ -1,12 +1,21 @@
 #ifndef ECS_H
 #define ECS_H
 
+// containers
 #include <vector>
 #include <list>
-#include <unordered_map>
-#include <memory>
 #include <queue>
-#include <functional>
+#include <unordered_map>	
+// Util
+#include <memory>				// unique_ptr
+#include <functional>			// Error handling
+#include <bitset>				// Signature
+#include <limits>
+#include <stdexcept>      // std::out_of_range
+// Component
+#include <typeinfo>
+#include <typeindex>
+#include <set>
 
 namespace ECS
 {
@@ -19,12 +28,18 @@ namespace ECS
 
 	// Const
 	const unsigned int MAX_ENTITY_SIZE = 2048;			// Maximum entity size
+	const unsigned int MAX_COMPONENT_PER_ENTITY = 128;	// Maximum number of component that entity can have
+	const unsigned int MAX_CID = std::numeric_limits<unsigned int>::max();
+	const unsigned int INVALID_CID = MAX_CID;
+	const unsigned long MAX_EID = std::numeric_limits<unsigned long>::max();
 
 	// Typedefs
 	typedef unsigned long EID;							// Entity ID. 
 	typedef unsigned int EINDEX;						// Entity Index
 	typedef unsigned int CID;							// Component ID
 	typedef unsigned int CINDEX;						// Component Index
+	typedef std::bitset<MAX_COMPONENT_PER_ENTITY> Signature;
+
 
 	// Error code
 	enum class ERROR_CODE
@@ -47,6 +62,45 @@ namespace ECS
 	private:
 		void operator()(T* t) { delete t; }
 	};	
+
+	template<class T> class ComponentDeleter
+	{
+		friend std::unique_ptr<ECS::Component, ComponentDeleter>;
+	private:
+		void operator()(Component* c)
+		{
+			if (T* t = dynamic_cast<T*>(c))
+			{
+				delete t;
+			}
+		}
+	};
+
+	class Component
+	{
+		friend class Manager;
+	protected:
+		Component();
+
+		// ID counter. Starts from 0
+		static CID idCounter;
+
+		// Component Id
+		CID id;
+
+		void wrapIdCounter();
+	public:
+		virtual ~Component() = default;
+	public:
+		// Disable all other constructors.
+		Component(const Component& arg) = delete;								// Copy constructor
+		Component(const Component&& arg) = delete;								// Move constructor
+		Component& operator=(const Component& arg) = delete;					// Assignment operator
+		Component& operator=(const Component&& arg) = delete;					// Move operator
+
+		const CID getId();
+		virtual void update(const float delta) = 0;
+	};
 
 	/**
 	*	@class EntityPool
@@ -109,16 +163,21 @@ namespace ECS
 		Entity();
 
 		// User can't call delete on entity. Must call kill.
-		~Entity();
+		~Entity() = default;
 
 		// Disable all other constructors.
-		Entity(const Entity& arg) = delete;						// Copy constructor
+		Entity(const Entity& arg) = delete;								// Copy constructor
 		Entity(const Entity&& arg) = delete;							// Move constructor
-		Entity& operator=(const Entity& arg) = delete;			// Assignment operator
-		Entity& operator=(const Entity&& arg) = delete;			// Move operator
-		// ID counter. Starts from 0
+		Entity& operator=(const Entity& arg) = delete;					// Assignment operator
+		Entity& operator=(const Entity&& arg) = delete;					// Move operator
 
-		// Id counter
+		// Signature.
+		Signature signature;
+
+		// Component Index map
+		std::unordered_map<CID, std::set<CINDEX>> componentIndicies;
+
+		// ID counter. Starts from 0
 		static EID idCounter;
 
 		// ID of entity. increases till 4294967295 (0xffffffff) then wrapped to 0. 
@@ -135,9 +194,55 @@ namespace ECS
 
 		// Wrap idcounter
 		void wrapIdCounter();
+
+		// get CINDEX by CID
+		void getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies);
+
+		const bool addCINDEXToCID(const CID cId, const CINDEX cIndex);
 	public:
 		// Kill entity. Once this is called, this entity will not be functional anymore.
 		void kill();
+
+		// Get entity Id
+		const EID getEntityId();
+
+		// Check if this entity is alive
+		const bool isAlive();
+
+		template<class T>
+		const bool hasComponent()
+		{
+			Manager* m = Manager::getInstance();
+			return m->hasComponent(this, std::typeid(T));
+		}
+
+		template<class T>
+		Component* getComponent()
+		{
+			Manager* m = Manager::getInstance();
+			return m->getComponent(this, std::typeid(T));
+		}
+
+		template<class T>
+		const bool addComponent()
+		{
+			Manager* m = Manager::getInstance();
+			return m->addComponent(this, std::typeid(T), new T());
+		}
+
+		template<class T>
+		const bool addComponent(Component* component)
+		{
+			Manager* m = Manager::getInstance();
+			return m->addComponent(this, std::typeid(T), component);
+		}
+
+		template<class T>
+		const bool removeComponent()
+		{
+			Manager* m = Manager::getInstance();
+			return m->removeComponent(this, typeid(T));
+		}
 	};
 
 	/**
@@ -165,13 +270,26 @@ namespace ECS
 		// Singleton instance
 		static std::unique_ptr<Manager, ECS::Deleter<Manager>> instance;
 
+		// Entity Pools
 		std::list<std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>> entityPools;
+
+		// Component ID Map. type_index <---> CID
+		std::unordered_map<std::type_index, CID> CIDMap;
+		// Components
+		std::vector</*CID*/std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>> components;
 
 		// Check if there is pool with name
 		const bool hasPoolName(const std::string& name);
 
 		// Send error
 		void sendError(const ERROR_CODE errorCode);
+
+		const CID getCIDFromTypeInfo(const std::type_info& t);
+		const bool hasComponent(Entity* e, const std::type_info& t);
+		Component* getComponent(Entity* e, const std::type_info& t);
+		std::vector<Component*> getComponents(Entity* e, const std::type_info& t);
+		const bool addComponent(Entity* e, const std::type_info& t, Component* c);
+		const bool removeComponent(Entity* e, const std::type_info& t);
 	public:
 		// Get instance.
 		static Manager* getInstance();
