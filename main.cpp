@@ -1,6 +1,6 @@
 #include <memory>
 #include <iostream>
-#include "src\ECS.h"
+#include "src/ECS.h"
 #include <typeinfo>
 #include <typeindex>
 #include <limits>
