@@ -68,6 +68,21 @@ void ECS::Manager::sendError(const ERROR_CODE errorCode)
 	}
 }
 
+void ECS::Manager::wrapIdCounter(const C_UNIQUE_ID cUniqueId)
+{
+	try
+	{
+		if (this->componentIdCounter.at(cUniqueId) >= ECS::INVALID_C_UNIQUE_ID)
+		{
+			this->componentIdCounter.at(cUniqueId) = 0;
+		}
+	}
+	catch (...)
+	{
+		return;
+	}
+}
+
 const bool ECS::Manager::hasPoolName(const std::string & name)
 {
 	// Check if there is a pool with same name.
@@ -216,7 +231,7 @@ Entity* ECS::Manager::createEntity(const std::string& poolName)
 	return nullptr;
 }
 
-Entity* ECS::Manager::getEntityById(const EID entityId)
+Entity* ECS::Manager::getEntityById(const E_ID entityId)
 {
 	if (entityId == -1)
 	{
@@ -241,128 +256,43 @@ Entity* ECS::Manager::getEntityById(const EID entityId)
 	return nullptr;
 }
 
-const CID ECS::Manager::getCIDFromTypeInfo(const std::type_info& t)
+const C_ID ECS::Manager::getComponentUniqueId(const std::type_info& t)
 {
 	const std::type_index typeIndex = std::type_index(t);
-	auto find_it = this->CIDMap.find(typeIndex);
-	if (find_it != this->CIDMap.end())
+	auto find_it = this->C_UNIQUE_IDMap.find(typeIndex);
+	if (find_it != this->C_UNIQUE_IDMap.end())
 	{
 		return find_it->second;
 	}
 	else
 	{
-		return INVALID_CID;
+		return INVALID_C_UNIQUE_ID;
 	}
 }
 
-const bool ECS::Manager::hasComponent(Entity* e, const std::type_info & t)
+const bool ECS::Manager::hasComponent(Entity* e, const std::type_info& t)
 {
-	const CID cId = this->getCIDFromTypeInfo(t);
-	if (cId != INVALID_CID)
+	const ECS::C_UNIQUE_ID cUniqueId = this->getComponentUniqueId(t);
+
+	if (cUniqueId == ECS::INVALID_C_UNIQUE_ID)
 	{
-		// This CID exists. Check if entity has it
-		//try
-		//{
-		//	e->signature.test(cId);
-		//}
-	}
-	else
-	{
-        // This CID doesn't exists yet.
+		// This type of component is unknown.
 		return false;
 	}
-}
-
-Component* ECS::Manager::getComponent(Entity* e, const std::type_info& t)
-{
-	const CID cId = this->getCIDFromTypeInfo(t);
-	if (cId != INVALID_CID)
-	{
-		std::set<CINDEX> cIndicies;
-		e->getCINDEXByCID(cId, cIndicies);
-		if (cIndicies.empty())
-		{
-			return nullptr;
-		}
-		else
-		{
-			try
-			{
-				// Just return first one becuse this isn't getCompoents
-				return this->components.at(cId).at(*cIndicies.begin()).get();
-			}
-			catch (...)
-			{
-				return nullptr;
-			}
-		}
-	}
 	else
 	{
-		return nullptr;
-	}
-}
+		Signature& s = e->signature;
 
-std::vector<Component*> ECS::Manager::getComponents(Entity* e, const std::type_info& t)
-{
-	std::vector<Component*> ret;
-
-	const CID cId = this->getCIDFromTypeInfo(t);
-	if (cId != INVALID_CID)
-	{
-		std::set<CINDEX> cIndicies;
-		e->getCINDEXByCID(cId, cIndicies);
-		if (cIndicies.empty())
-		{
-			return ret;
-		}
-		else
-		{
-			try
-			{
-				// Just return first one becuse this isn't getCompoents
-				std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>& components = this->components.at(cId);
-
-				for (auto& component : components)
-				{
-					ret.push_back(component.get());
-				}
-
-				return ret;
-			}
-			catch (...)
-			{
-				return ret;
-			}
-		}
-	}
-	else
-	{
-		return ret;
-	}
-}
-
-const bool ECS::Manager::addComponent(Entity* e, const std::type_info& t, Component* c)
-{
-	if (c == nullptr) return false;
-
-	const CID cId = this->getCIDFromTypeInfo(t);
-	if (cId != INVALID_CID)
-	{
-		// This component type was added before.
 		try
 		{
-			this->components.at(cId).push_back(std::unique_ptr<Component, ComponentDeleter<Component>>(c, ComponentDeleter<Component>()));
-			const CINDEX cIndex = this->components.at(cId).size();
-			c->id = cId;
-
-			try
+			s.test(cUniqueId);
+			if (s[cUniqueId] == true)
 			{
-				e->signature.test(cId);
+				return true;
 			}
-			catch (...)
+			else
 			{
-
+				return false;
 			}
 		}
 		catch (...)
@@ -370,20 +300,145 @@ const bool ECS::Manager::addComponent(Entity* e, const std::type_info& t, Compon
 			return false;
 		}
 	}
+}
+
+Component* ECS::Manager::getComponent(Entity* e, const std::type_info& t)
+{
+	// Get unique id
+	const ECS::C_UNIQUE_ID cUniqueId = this->getComponentUniqueId(t);
+	if (cUniqueId == ECS::INVALID_C_UNIQUE_ID)
+	{
+		// This type of component is unknown.
+		return nullptr;
+	}
 	else
 	{
-		// This component never had added. 
-		// Add as new component type
-		c->id = ++Component::idCounter;
-		Component::wrapIdCounter();
+		std::set<C_INDEX> cIndicies;
+		e->getComponentIndiicesByUniqueId(cUniqueId, cIndicies);
 
-		// Add to CID map
-		this->CIDMap.insert(std::pair<std::type_index, CID>(std::type_index(t), cId));
-
-		// Add component
-		this->components.push_back(std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>());
-		this->components.back().push_back(std::unique_ptr<Component, ComponentDeleter<Component>>(c, ECS::ComponentDeleter<Component>()));
+		if (cIndicies.empty())
+		{
+			// Doesn't have any. hmm..
+			return nullptr;
+		}
+		else
+		{
+			// Because this is getComponent not getComponents, return first one
+			return this->components.at(cUniqueId).at(*cIndicies.begin()).get();
+		}
 	}
+}
+
+std::vector<Component*> ECS::Manager::getComponents(Entity* e, const std::type_info& t)
+{
+	std::vector<Component*> ret;
+
+	const ECS::C_UNIQUE_ID cUniqueId = this->getComponentUniqueId(t);
+	if (cUniqueId == ECS::INVALID_C_UNIQUE_ID)
+	{
+		// This type of component is unknown.
+		return ret;
+	}
+	else
+	{
+		std::set<C_INDEX> cIndicies;
+		e->getComponentIndiicesByUniqueId(cUniqueId, cIndicies);
+
+		if (cIndicies.empty())
+		{
+			// Doesn't have any. hmm..
+			return ret;
+		}
+		else
+		{
+			// Return all components
+			std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>& components = this->components.at(cUniqueId);
+
+			for (auto& component : components)
+			{
+				ret.push_back(component.get());
+			}
+
+			return ret;
+		}
+	}
+}
+
+const bool ECS::Manager::addComponent(Entity* e, const std::type_info& t, Component* c)
+{
+	if (c == nullptr) return false;
+
+	bool newType = false;
+	C_UNIQUE_ID cUniqueId = this->getComponentUniqueId(t);
+
+	if (cUniqueId == ECS::INVALID_C_UNIQUE_ID)
+	{
+		// This component type has never added before.
+		// Create new
+		C_UNIQUE_ID newUniqueId = Component::uniqueIdCounter++;
+
+		if (newUniqueId >= ECS::MAX_COMPONENT_TYPE)
+		{
+			// Can't create new component type.
+			Component::uniqueIdCounter--;
+			return false;
+		}
+
+		// Add new Unique id with type_index key
+		this->C_UNIQUE_IDMap.insert(std::pair<std::type_index, C_UNIQUE_ID>(std::type_index(t), newUniqueId));
+
+		// update
+		cUniqueId = newUniqueId;
+
+		newType = true;
+	}
+
+	if (newType)
+	{
+		// Create enw vector
+		this->components.push_back(std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>());
+		// Create id counter
+		this->componentIdCounter.push_back(0);
+	}
+	else
+	{
+		// Check if there is component with same C_ID to prevent duplication
+		for (auto& component : this->components.at(cUniqueId))
+		{
+			if (component->getId() == c->getId())
+			{
+				return false;
+			}
+		}
+	}
+
+	// Add component
+	this->components.at(cUniqueId).push_back(std::unique_ptr<Component, ComponentDeleter<Component>>(c, ComponentDeleter<Component>()));
+
+	// Get index
+	const C_INDEX cIndex = this->components.at(cUniqueId).size() - 1;
+
+	// Add index to entity
+	e->componentIndicies[cUniqueId].insert(cIndex);
+	// update signature
+	e->signature[cUniqueId] = 1;
+	// Update component indicies
+	auto find_it = e->componentIndicies.find(cUniqueId);
+	if (find_it == e->componentIndicies.end())
+	{
+		e->componentIndicies.insert(std::pair<C_UNIQUE_ID, std::set<C_INDEX>>(cUniqueId, std::set<C_INDEX>()));
+	}
+	e->componentIndicies[cUniqueId].insert(cIndex);
+
+	// Assign unique id
+	c->uniqueId = cUniqueId;
+	// Assign id
+	c->id = this->componentIdCounter.at(cUniqueId)++;
+	// Set owner id
+	c->ownerId = e->getId();
+	// wrap counter 
+	this->wrapIdCounter(cUniqueId);
+
 	return true;
 }
 
@@ -398,10 +453,34 @@ void ECS::Manager::clear()
 	this->entityPools.insert(std::pair<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>>(ECS::Manager::DEFAULT_POOL_NAME, std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>(new EntityPool(ECS::Manager::DEFAULT_POOL_NAME), ECS::Deleter<EntityPool>())));
 
 	this->components.clear();
-	this->CIDMap.clear();
+	this->componentIdCounter.clear();
+	this->C_UNIQUE_IDMap.clear();
 
-	Component::idCounter = 0;
+	Component::uniqueIdCounter = 0;
 	Entity::idCounter = 0;
+}
+
+void ECS::Manager::printComponentsInfo()
+{
+	std::cout << std::endl;
+	std::cout << "ECS::Printing Components informations" << std::endl;
+	std::cout << "Total Component types: " << this->C_UNIQUE_IDMap.size() << std::endl;
+	std::cout << "Types -------------------------------" << std::endl;
+
+	for (auto type : this->C_UNIQUE_IDMap)
+	{
+		const unsigned int size = this->components.at(type.second).size();
+		std::cout << "Name: " << type.first.name() << ", Unique ID: " << type.second << ", Count: " << size << std::endl;
+		std::cout << "-- Component details. Unique ID: " << type.second << " --" << std::endl;
+		for (unsigned int i = 0; i < size; i++)
+		{
+			std::cout << "ID: " << this->components.at(type.second).at(i)->getId() <<  ", Owner ID = " << this->components.at(type.second).at(i)->ownerId << std::endl;
+		}
+		std::cout << "-------------------------------------" << std::endl;
+	}
+
+	std::cout << "-------------------------------------" << std::endl;
+	std::cout << std::endl;
 }
 
 //============================================================================================
@@ -527,7 +606,7 @@ void ECS::EntityPool::reset()
 	this->nextIndicies.clear();
 }
 
-ECS::Entity* ECS::EntityPool::getEntityById(const EID eId)
+ECS::Entity* ECS::EntityPool::getEntityById(const E_ID eId)
 {
 	for (auto& entity : this->pool)
 	{
@@ -542,20 +621,19 @@ ECS::Entity* ECS::EntityPool::getEntityById(const EID eId)
 
 //============================================================================================
 
-EID ECS::Entity::idCounter = 0;
+E_ID ECS::Entity::idCounter = 0;
 
 ECS::Entity::Entity()
 : alive(false)
 , sleep(false)
 , eId(-1)
-, eIndex(-1)
 , signature(0)
 , entityPoolName(std::string())
 {}
 
 void ECS::Entity::wrapIdCounter()
 {
-	if (ECS::Entity::idCounter >= ECS::MAX_EID)
+	if (ECS::Entity::idCounter >= ECS::MAX_E_ID)
 	{
 		// id Counter reached max number. Wrap to 0. 
 		// This means user created more 4294967295 entities, which really doesn't happen all that much.
@@ -563,11 +641,11 @@ void ECS::Entity::wrapIdCounter()
 	}
 }
 
-void ECS::Entity::getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies)
+void ECS::Entity::getComponentIndiicesByUniqueId(const C_UNIQUE_ID cUniqueId, std::set<C_INDEX>& cIndicies)
 {
 	try
 	{
-		for (auto index : this->componentIndicies.at(cId))
+		for (auto index : this->componentIndicies.at(cUniqueId))
 		{
 			cIndicies.insert(index);
 		}
@@ -578,7 +656,7 @@ void ECS::Entity::getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies)
 	}
 }
 
-const bool ECS::Entity::addCINDEXToCID(const CID cId, const CINDEX cIndex)
+const bool ECS::Entity::addCINDEXToCID(const C_ID cId, const C_INDEX cIndex)
 {
 	return true;
 }
@@ -608,7 +686,7 @@ void ECS::Entity::kill()
 	this->componentIndicies.clear();
 }
 
-const EID ECS::Entity::getId()
+const E_ID ECS::Entity::getId()
 {
 	return this->eId;
 }
@@ -625,21 +703,23 @@ const bool ECS::Entity::isAlive()
 
 //============================================================================================
 
-CID ECS::Component::idCounter = 0;
+C_ID ECS::Component::uniqueIdCounter = 0;
 
 Component::Component() 
-: id(INVALID_CID) 
+: id(INVALID_C_ID) 
+, uniqueId(INVALID_C_UNIQUE_ID)
+, ownerId(INVALID_E_ID)
 {}
 
-void Component::wrapIdCounter()
+void ECS::Component::wrapUniqueIdCounter()
 {
-	if (Component::idCounter >= INVALID_CID)
+	if (Component::uniqueIdCounter >= INVALID_C_UNIQUE_ID)
 	{
-		Component::idCounter = 0;
+		Component::uniqueIdCounter = 0;
 	}
 }
 
-const CID ECS::Component::getId()
+const C_ID ECS::Component::getId()
 {
 	return this->id;
 }

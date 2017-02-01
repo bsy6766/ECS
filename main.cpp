@@ -31,7 +31,7 @@ int main()
 		ECS::Entity* e = m->createEntity();
 		// That's it! But let's check several this.
 		// This entity's id must be 0 because it's the very first one we created
-		const ECS::EID eId = e->getId();
+		const ECS::E_ID eId = e->getId();
 		assert(eId == 0);
 		// Since we didn't tell which EntityPool to use, it's default.
 		const std::string entityPoolName = e->getEntityPoolName();
@@ -48,7 +48,7 @@ int main()
 	{
 		ECS::Entity* e = m->createEntity();
 		// Id must be 0 because we cleared manager above
-		ECS::EID eId = e->getId();
+		ECS::E_ID eId = e->getId();
 		assert(eId == 0);
 		// You can't call delete on entity. 
 		// delete e;
@@ -63,7 +63,7 @@ int main()
 		// Try to create again.
 		ECS::Entity* e2 = m->createEntity();
 		// id is 1 
-		const ECS::EID eId2 = e->getId();
+		const ECS::E_ID eId2 = e->getId();
 		assert(eId2 == 1);
 
 	}
@@ -77,7 +77,7 @@ int main()
 	{
 		ECS::Entity* e = m->createEntity();
 		// Id must be 0 because we cleared manager above
-		ECS::EID eId = e->getId();
+		ECS::E_ID eId = e->getId();
 		assert(eId == 0);
 		// Let's pretend you lost entity.
 		e = nullptr;
@@ -197,28 +197,89 @@ int main()
 	// clear manager
 	m->clear();
 
-	// 8. Create component
-	// Create your own component
+	// Example of creating test component
 	class TestComponent : public ECS::Component
 	{
 	public:
 		TestComponent::TestComponent() : ECS::Component(), data(0) {};
-		TestComponent::~TestComponent() = default;
+		TestComponent::~TestComponent() {};
 		int data;
 
 		virtual void update(const float delta) override {}
 	};
 
+	// 8. Create component
+	// Create component
 	{
 		// Create instance
 		TestComponent* tc = new TestComponent();
 		// Try to get component id, but it's invalid
-		assert(tc->getId() == ECS::INVALID_CID);
+		assert(tc->getId() == ECS::INVALID_C_ID);
 		// What? This is becuase manager doesn't know if TestComponent exists.
 		// Manager only tracks that has be exposed to manager class. 
-		// Let's try to add to entity.
-		ECS::Entity* e = m->createEntity();
+
+		// You can't just create base component
+		//ECS::Component* badComp = new ECS::Component();			// illegal
+
+		// delete for now.
 		delete tc;
+	}
+
+	// 9. Add one component
+	// Add one component to entity. 
+	{
+		// Create instance
+		TestComponent* tc = new TestComponent();
+		// Try to get component id, but it's invalid
+		assert(tc->getId() == ECS::INVALID_C_ID);
+		// New entity
+		ECS::Entity* e = m->createEntity();
+
+		// Check if entity already has this type of component
+		bool hasTestComp = e->hasComponent<TestComponent>();
+		// Ofcourse doesn't have it because we naver added it.
+		assert(hasTestComp == false);
+
+		// Add component to entity
+		bool success = e->addComponent<TestComponent>(tc);
+		assert(success);
+
+		// Because this is the first TestComponent component we created, id will be 0
+		assert(tc->getId() == 0);
+
+		// Change data
+		tc->data = 5;
+
+		// You can query like
+		TestComponent* tc2 = e->getComponent<TestComponent>();
+		assert(tc->getId() == tc2->getId());
+		assert(tc->data == tc2->data);
+
+		m->printComponentsInfo();
+	}
+
+	// clear manager
+	m->clear();
+
+	// 10. Add mutliple same components
+	{
+		// New entity
+		ECS::Entity* e = m->createEntity();
+
+		for (int i = 0; i < 5; i++)
+		{
+			e->addComponent<TestComponent>();
+		}
+
+		// Get allcomponents
+		std::vector<TestComponent*> components = e->getComponents<TestComponent>();
+
+		for (int i = 0; i < 5; i++)
+		{
+			delete components.at(i);
+		}
+
+		m->printComponentsInfo();
 	}
 
 	// Final. Delete manager
