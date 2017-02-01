@@ -4,14 +4,15 @@
 // containers
 #include <vector>
 #include <list>
-#include <queue>
+#include <deque>
 #include <unordered_map>	
 // Util
 #include <memory>				// unique_ptr
 #include <functional>			// Error handling
 #include <bitset>				// Signature
 #include <limits>
-#include <stdexcept>      // std::out_of_range
+#include <stdexcept>
+#include <cmath>				// power of 2
 // Component
 #include <typeinfo>
 #include <typeindex>
@@ -40,7 +41,6 @@ namespace ECS
 	typedef unsigned int CINDEX;						// Component Index
 	typedef std::bitset<MAX_COMPONENT_PER_ENTITY> Signature;
 
-
 	// Error code
 	enum class ERROR_CODE
 	{
@@ -49,6 +49,7 @@ namespace ECS
 		ECS_DUPLICATED_POOL_NAME,
 		ECS_POOL_NOT_FOUND,
 		ECS_POOL_IS_FULL,
+		ECS_INVALID_ENTITY_ID,
 		ECS_ENTITY_NOT_FOUND,
 	};
 
@@ -84,11 +85,11 @@ namespace ECS
 
 		// ID counter. Starts from 0
 		static CID idCounter;
+		static void wrapIdCounter();
 
 		// Component Id
 		CID id;
 
-		void wrapIdCounter();
 	public:
 		virtual ~Component() = default;
 	public:
@@ -98,7 +99,10 @@ namespace ECS
 		Component& operator=(const Component& arg) = delete;					// Assignment operator
 		Component& operator=(const Component&& arg) = delete;					// Move operator
 
+		// Get component Id
 		const CID getId();
+
+		// Derived class muse override this.
 		virtual void update(const float delta) = 0;
 	};
 
@@ -110,11 +114,12 @@ namespace ECS
 	class EntityPool
 	{
 	private:
+		friend class Entity;
 		friend class Manager;
 		friend class Deleter<EntityPool>;
 	public:
 		// Default max size
-		static const unsigned int DEFAULT_MAX_POOL_SIZE = 2048;
+		static const unsigned int DEFAULT_POOL_SIZE = 2048;
 	private:
 		// Name of the pool.
 		std::string name;
@@ -123,7 +128,7 @@ namespace ECS
 		std::vector<std::unique_ptr<ECS::Entity, Deleter<Entity>>> pool;
 
 		// Private constructor. Use manager to create pool
-		EntityPool(const std::string& name, const unsigned int maxSize = EntityPool::DEFAULT_MAX_POOL_SIZE);
+		EntityPool(const std::string& name, const unsigned int size = EntityPool::DEFAULT_POOL_SIZE);
 
 		// Private constructor. Use manager to delete pool
 		~EntityPool();
@@ -135,16 +140,61 @@ namespace ECS
 		EntityPool& operator=(const EntityPool&& arg) = delete;			// Move operator
 
 		// fresh entity indicies in pool. This keep tracks the left most entity that is ready to be used
-		std::queue<EINDEX> nextIndicies;
+		std::deque<EINDEX> nextIndicies;
 
 		// Maximum size of this pool.
-		int maxPoolSize;
+		unsigned int poolSize;
 
 		// Check if index is valid(in range)
 		const bool isValidIndex(const unsigned int index);
+
+		// Check if number is power of 2
+		const bool isPowerOfTwo(const unsigned int n);
+
+		// Round up number to nearest power of two
+		void roundToNearestPowerOfTwo(unsigned int& n);
 	public:
-		// Get how many entities are active in this pool
-		const unsigned int getEntityCount(const bool onlyAlive = true);
+		/**
+		*	@name getEntityById
+		*	@breif Get Entity with entity id
+		*	@param eID An entity Id.
+		*	@return Entity if exists. Else, nullptr.
+		*/
+		ECS::Entity* getEntityById(const EID eId);
+
+		/**
+		*	@name getEntityCount
+		*	@breif Get how many alive entities are in pool
+		*	@return The number of alive entities in pool
+		*/
+		const unsigned int getAliveEntityCount();
+
+		/**
+		*	@name getPoolSize
+		*	@return Get 
+		*/
+		const unsigned int getPoolSize();
+
+		/**
+		*	@name getName
+		*	@return String name of this pool
+		*/
+		const std::string getName();
+
+		/**
+		*	@name resize
+		*	@brief Resizes pool. 
+		*	@note Reducing size of pool have change to delete alive entities. Only use it when you are sure about it
+		*	@param size New size to resize. Must be power of 2. 
+		*	@return True if successfully resizes. Else, false.
+		*/
+		const bool resize(const unsigned int size);
+
+		/**
+		*	@name reset
+		*	@brief Resets all the entitiy in the pool. This will remove all the components that are attached to entities.
+		*/
+		void reset();
 	};
     
 	/**
@@ -154,10 +204,11 @@ namespace ECS
 	*/
 	class Manager
 	{
-	private:
-		friend class Deleter<Manager>;
+	public:
 		// const
 		static const std::string DEFAULT_POOL_NAME;
+	private:
+		friend class Deleter<Manager>;
 
 		// Private constructor. Call getInstance for access.
 		Manager();
@@ -173,14 +224,14 @@ namespace ECS
 		static std::unique_ptr<Manager, ECS::Deleter<Manager>> instance;
 
 		// Entity Pools
-		std::list<std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>> entityPools;
+		std::unordered_map<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>> entityPools;
 
 		// Component ID Map. type_index <---> CID
 		std::unordered_map<std::type_index, CID> CIDMap;
 		// Components
 		std::vector</*CID*/std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>> components;
 
-		// Check if there is pool with name
+		// Check if there is pool with same name
 		const bool hasPoolName(const std::string& name);
 
 		// Send error
@@ -219,7 +270,9 @@ namespace ECS
 		*	@see EntityPool::DEFAULT_MAX_POOL_SIZE
 		*	@return True if successfully creates. Else, false.
 		*/
-		const bool createEntityPool(const std::string& name, const int maxSize = EntityPool::DEFAULT_MAX_POOL_SIZE);
+		EntityPool* createEntityPool(const std::string& name, const int maxSize = EntityPool::DEFAULT_POOL_SIZE);
+
+		const bool addEntityPool(ECS::EntityPool* entityPool);
 
 		/**
 		*	@name deleteEntityPool
@@ -237,7 +290,7 @@ namespace ECS
 		*	@param name A pool's string name to detach.
 		*	@return EntityPool if exists. Else, nullptr.
 		*/
-		EntityPool* detachPool(const std::string& name);
+		EntityPool* detachEntityPool(const std::string& name = ECS::Manager::DEFAULT_POOL_NAME);
 
 		/**
 		*	@name getPool
@@ -245,7 +298,7 @@ namespace ECS
 		*	@param name A pool's string name to get.
 		*	@return EntityPool if exists. Else, nullptr.
 		*/
-		EntityPool* getPool(const std::string& name);
+		EntityPool* getEntityPool(const std::string& name = ECS::Manager::DEFAULT_POOL_NAME);
 
 		/**
 		*	@name createEntity
@@ -261,24 +314,47 @@ namespace ECS
 		*	@brief Get Entity by entity's Id.
 		*	@note Specify the pool name if requried.
 		*	@param entityId Entity Id to query.
-		*	@param poolName A pool's name to query specifically. Set to Manager::DEFAULT_POOL_NAME by default.
 		*	@see Manager::DEFAULT_POOL_NAME
 		*	@return Entity if found. Else, nullptr.
 		*/
-        Entity* getEntityById(const EID entityId, const std::string& poolName = Manager::DEFAULT_POOL_NAME);
+        Entity* getEntityById(const EID entityId);
+
+		/**
+		*	@name registerComponent
+		*	@brief Registers component type to manager.
+		*	@note This is extra feature for component if you really want let manager know all the component that exsits.
+		*/
+		template<class T>
+		const CID registerComponent(T* component);
         
+		/**
+		*	@name hasComponent
+		*	@brief Check if entity has specific component type
+		*	@return True if entity has specific component type. Else, false.
+		*/
         template<class T>
         const bool hasComponent(Entity* e)
         {
             return hasComponent(e, typeid(T));
         }
         
+		/**
+		*	@name getComponent
+		*	@breif Get the component of type specified that this entity has.
+		*	@note If entity has multiple same components, it will return the first one and the order is not guaranteed.
+		*	@return Component pointer.
+		*/
         template<class T>
         T* getComponent(Entity* e)
         {
             return dynamic_cast<T*>(getComponent(e, typeid(T)));
         }
         
+		/**
+		*	@name getComponents
+		*	@brief Get all component of type specified that this entity has.
+		*	@return Vector of components.
+		*/
         template<class T>
         std::vector<T*> getComponents(Entity* e)
         {
@@ -292,29 +368,44 @@ namespace ECS
             return ret;
         }
         
+		/**
+		*	@name addComponent
+		*	@brief Add new component of type specified to entity.
+		*	@return True if successfully added. Else, false.
+		*/
         template<class T>
         const bool addComponent(Entity* e)
         {
             return addComponent(e, typeid(T), new T());
         }
         
+		/**
+		*	@name addComponent
+		*	@brief Add component of type specified to entity.
+		*	@return True if succesfully added. Else, false.
+		*/
         template<class T>
         const bool addComponent(Entity* e, Component* c)
         {
             return addComponent(e, typeid(T), c);
         }
         
+		/**
+		*	@name removeComponents
+		*	@brief Remove all component of tpye specified to entity.
+		*	@return True if successfully removed. Else, false.
+		*/
         template<class T>
         const bool removeComponents(Entity* e)
         {
             return removeComponents(e, typeid(T));
         }
-        
-        /**
-         *  @name hasComponent
-         *  @brief Check if the entity has component
-         *  @
-         */
+
+		/**
+		*	@name clear
+		*	@brief Clear all EntityPools and Entities. 
+		*/
+		void clear();
 
 		// Error callback. 
 		std::function<void(const ERROR_CODE, const std::string&)> errorCallback;
@@ -353,32 +444,40 @@ namespace ECS
         
         // ID counter. Starts from 0
         static EID idCounter;
+		static void wrapIdCounter();
         
         // ID of entity. increases till 4294967295 (0xffffffff) then wrapped to 0.
         EID eId;
         
         // Index of entity pool for fast access. This is fixed.
         EINDEX eIndex;
+
+		// Pool name that this entity lives
+		std::string entityPoolName;
         
         // If entity is only visible if it's alive. Dead entities will not be queried or accessible.
         bool alive;
+
+		// If entity is in sleep, it doesn't get updated by manager. 
+		bool sleep;
         
         // Revive this entity and get ready to use
         void revive();
-        
-        // Wrap idcounter
-        void wrapIdCounter();
         
         // get CINDEX by CID
         void getCINDEXByCID(const CID cId, std::set<CINDEX>& cIndicies);
         
         const bool addCINDEXToCID(const CID cId, const CINDEX cIndex);
+
     public:
         // Kill entity. Once this is called, this entity will not be functional anymore.
         void kill();
         
         // Get entity Id
-        const EID getEntityId();
+        const EID getId();
+
+		// Get EntityPool name that this entity lives
+		const std::string getEntityPoolName();
         
         // Check if this entity is alive
         const bool isAlive();
