@@ -22,21 +22,46 @@
 namespace ECS
 {
 	// Classes
+	class Pool;
 	class EntityPool;
+	class ComponentPool;
 	class Entity;
 	class Component;
 	class System;
 	class Manager;
 
 	// Const
-	const unsigned int MAX_ENTITY_SIZE = 2048;					// Maximum entity size
-	const unsigned int MAX_COMPONENT_TYPE = 256;				// Maximum number of component types
+	// Maximum number of component id.
 	const unsigned int MAX_C_ID = std::numeric_limits<unsigned int>::max();
-	const unsigned int MAX_C_UNIQUE_ID = std::numeric_limits<unsigned int>::max();
+	// Invalid component id
 	const unsigned int INVALID_C_ID = MAX_C_ID;
-	const unsigned int INVALID_C_UNIQUE_ID = MAX_COMPONENT_TYPE;
+
+	// Maximum number of component index
+	const unsigned int MAX_C_INDEX = std::numeric_limits<unsigned int>::max();
+	// Invalid component index
+	const unsigned int INVALID_C_INDEX = MAX_C_INDEX;
+
+	// Maximum number of component unique id
+	const unsigned int MAX_C_UNIQUE_ID = std::numeric_limits<unsigned int>::max();
+	// Invalid component unique id
+	const unsigned int INVALID_C_UNIQUE_ID = MAX_C_UNIQUE_ID;
+
+	// Maximum number of entity id
 	const unsigned long MAX_E_ID = std::numeric_limits<unsigned long>::max();
+	// Invalid entity id
 	const unsigned long INVALID_E_ID = MAX_E_ID;
+
+	// Default pool string name
+	const std::string DEFAULT_ENTITY_POOL_NAME = "DEFAULT";
+	// Default EntityPool size
+	const unsigned int DEFAULT_ENTITY_POOL_SIZE = 2048;
+	// Default ComponentPool size
+	const unsigned int DEFAULT_COMPONENT_POOL_SIZE = 4096;
+
+	// Maximum number of component types that single entity can hold
+	// Modify this to increase the number of component type.
+	// i.e. Entity can hold more than 256 position component but can't hold 256 different type of component
+	const unsigned int MAX_COMPONENT_TYPE_PER_ENTITY = 256;
 
 	// Typedefs
 	typedef unsigned long E_ID;							// Entity ID. 
@@ -44,7 +69,7 @@ namespace ECS
 	typedef unsigned int C_ID;							// Component ID
 	typedef unsigned int C_UNIQUE_ID;					// Component unique ID
 	typedef unsigned int C_INDEX;						// Component Index
-	typedef std::bitset<MAX_COMPONENT_TYPE> Signature;
+	typedef std::bitset<MAX_COMPONENT_TYPE_PER_ENTITY> Signature;
 
 	// Error code
 	enum class ERROR_CODE
@@ -58,30 +83,18 @@ namespace ECS
 		ECS_ENTITY_NOT_FOUND,
 	};
 
+
 	// Custom deleter for unique_ptr.
 	// By making this, user can't call destructor(delete) on any instances.
 	template<class T> class Deleter
 	{
 		friend std::unique_ptr<ECS::Entity, Deleter>;
-		friend std::unique_ptr<ECS::EntityPool, Deleter>;
 		friend std::unique_ptr<ECS::Manager, Deleter>;
+		friend std::unique_ptr<ECS::Component, Deleter>;
+		friend std::unique_ptr<ECS::EntityPool, Deleter>;
+		friend std::unique_ptr<ECS::ComponentPool, Deleter>;
 	private:
 		void operator()(T* t) { delete t; }
-	};	
-
-	/*
-	*/
-	template<class T> class ComponentDeleter
-	{
-		friend std::unique_ptr<Component, ComponentDeleter<Component>>;
-	private:
-		void operator()(Component* c)
-		{
-			if (T* t = dynamic_cast<T*>(c))
-			{
-				delete t;
-			}
-		}
 	};
 
 	/**
@@ -97,20 +110,52 @@ namespace ECS
 	class Component
 	{
 		friend class Manager;
-		friend class ComponentDeleter<Component>;
-	protected:
-		Component();
+		friend class Deleter<Component>;
 
-		// ID counter. Starts from 0
-		static void wrapUniqueIdCounter();
-	public:
-		virtual ~Component() {};
+		friend bool operator==(const Component& a, const Component& b)
+		{
+			return ((a.id == b.id) &&
+					(a.uniqueId == b.uniqueId) &&
+					(a.index == b.index) &&
+					(a.ownerId == b.ownerId));
+		}		
+		
+		friend bool operator!=(const Component& a, const Component& b)
+		{
+			return ((a.id != b.id) ||
+				(a.uniqueId != b.uniqueId) ||
+				(a.index != b.index) ||
+				(a.ownerId != b.ownerId));
+		}
+	protected:
+		// Protected constructor. Can't create bass class from out side
+		Component();
 	private:
+		void* operator new(size_t sz) throw (std::bad_alloc)
+		{
+			void* mem = std::malloc(sz);
+			if (mem)
+				return mem;
+			else
+				throw std::bad_alloc();
+		}
+
+		void operator delete(void* ptr) throw()
+		{
+			std::free(ptr);
+		}
+
 		// Component Id
 		C_ID id;
 
+		// Index 
+		C_INDEX index;
+
 		// counter
 		static C_UNIQUE_ID uniqueIdCounter;
+
+		// ID counter. Starts from 0
+		static void wrapUniqueIdCounter();
 
 		// Unique id number of this component type
 		C_UNIQUE_ID uniqueId;
@@ -118,6 +163,9 @@ namespace ECS
 		// Owner of this component
 		E_ID ownerId;
 	public:
+		// Public virtual destructor. Default.
+		virtual ~Component() = default;
+
 		// Disable all other constructors.
 		Component(const Component& arg) = delete;								// Copy constructor
 		Component(const Component&& arg) = delete;								// Move constructor
@@ -126,6 +174,12 @@ namespace ECS
 
 		// Get component Id
 		const C_ID getId();
+
+		// Get unique id
+		const C_UNIQUE_ID getUniqueId();
+
+		// Get owner entity id of this component
+		const E_ID getOwnerId();
 
 		// Derived class muse override this.
 		virtual void update(const float delta) = 0;
@@ -136,36 +190,17 @@ namespace ECS
 	*	@brief A simple std::vector wrapper with few rules.
 	*	@note This is similar to pool implementation.
 	*/
-	class EntityPool
+	class Pool
 	{
-	private:
-		friend class Entity;
-		friend class Manager;
-		friend class Deleter<EntityPool>;
-	public:
-		// Default max size
-		static const unsigned int DEFAULT_POOL_SIZE = 2048;
-	private:
+	protected:
 		// Name of the pool.
 		std::string name;
 
-		// container
-		std::vector<std::unique_ptr<ECS::Entity, Deleter<Entity>>> pool;
-
 		// Private constructor. Use manager to create pool
-		EntityPool(const std::string& name, const unsigned int size = EntityPool::DEFAULT_POOL_SIZE);
-
-		// Private constructor. Use manager to delete pool
-		~EntityPool();
-
-		// Disable all other constructors.
-		EntityPool(const EntityPool& arg) = delete;						// Copy constructor
-		EntityPool(const EntityPool&& arg) = delete;					// Move constructor
-		EntityPool& operator=(const EntityPool& arg) = delete;			// Assignment operator
-		EntityPool& operator=(const EntityPool&& arg) = delete;			// Move operator
+		Pool(const std::string& name, const unsigned int size);
 
 		// fresh entity indicies in pool. This keep tracks the left most entity that is ready to be used
-		std::deque<E_INDEX> nextIndicies;
+		std::deque<unsigned int> nextIndicies;
 
 		// Maximum size of this pool.
 		unsigned int poolSize;
@@ -179,26 +214,15 @@ namespace ECS
 		// Round up number to nearest power of two
 		void roundToNearestPowerOfTwo(unsigned int& n);
 	public:
-		/**
-		*	@name getEntityById
-		*	@breif Get Entity with entity id
-		*	@param eID An entity Id.
-		*	@return Entity if exists. Else, nullptr.
-		*/
-		ECS::Entity* getEntityById(const E_ID eId);
+		// Private constructor. Use manager to delete pool
+		virtual ~Pool();
 
-		/**
-		*	@name getEntityCount
-		*	@breif Get how many alive entities are in pool
-		*	@return The number of alive entities in pool
-		*/
-		const unsigned int getAliveEntityCount();
-
-		/**
-		*	@name getPoolSize
-		*	@return Get 
-		*/
-		const unsigned int getPoolSize();
+		// Disable all other constructors.
+		Pool(const Pool& arg) = delete;						// Copy constructor
+		Pool(const Pool&& arg) = delete;					// Move constructor
+		Pool& operator=(const Pool& arg) = delete;			// Assignment operator
+		Pool& operator=(const Pool&& arg) = delete;			// Move operator
+	public:
 
 		/**
 		*	@name getName
@@ -207,19 +231,63 @@ namespace ECS
 		const std::string getName();
 
 		/**
-		*	@name resize
-		*	@brief Resizes pool. 
-		*	@note Reducing size of pool have change to delete alive entities. Only use it when you are sure about it
-		*	@param size New size to resize. Must be power of 2. 
-		*	@return True if successfully resizes. Else, false.
+		*	@name getPoolSize
+		*	@return Get
 		*/
-		const bool resize(const unsigned int size);
+		const unsigned int getPoolSize();
 
 		/**
-		*	@name reset
-		*	@brief Resets all the entitiy in the pool. This will remove all the components that are attached to entities.
+		*	@name resize
+		*	@brief Resizes pool.
+		*	@note Reducing size of pool have change to delete alive entities. Only use it when you are sure about it
+		*	@param size New size to resize. Must be power of 2.
+		*	@return True if successfully resizes. Else, false.
 		*/
-		void reset();
+		//const bool resize(const unsigned int size);
+	};
+
+	class EntityPool : public Pool
+	{
+	private:
+		friend class Entity;
+		friend class Manager;
+		friend class Deleter<EntityPool>;
+
+		EntityPool(const std::string& name, const unsigned int size);
+		~EntityPool();
+
+		EntityPool(const EntityPool& arg) = delete;								// Copy constructor
+		EntityPool(const EntityPool&& arg) = delete;								// Move constructor
+		EntityPool& operator=(const EntityPool& arg) = delete;					// Assignment operator
+		EntityPool& operator=(const EntityPool&& arg) = delete;					// Move operator
+
+		std::vector<std::unique_ptr<ECS::Entity, ECS::Deleter<ECS::Entity>>> pool;
+	public:
+		void clear();
+
+		const int countAliveEntity();
+		ECS::Entity* getEntityById(const E_ID eId);
+	};
+
+	class ComponentPool : public Pool
+	{
+	private:
+		friend class Entity;
+		friend class Manager;
+		friend class Deleter<ComponentPool>;
+
+		ComponentPool(const std::string& name, const unsigned int size);
+		~ComponentPool();
+
+		ComponentPool(const ComponentPool& arg) = delete;								// Copy constructor
+		ComponentPool(const ComponentPool&& arg) = delete;								// Move constructor
+		ComponentPool& operator=(const ComponentPool& arg) = delete;					// Assignment operator
+		ComponentPool& operator=(const ComponentPool&& arg) = delete;					// Move operator
+
+		std::vector<std::unique_ptr<ECS::Component, ECS::Deleter<ECS::Component>>> pool;
+	public:
+		void clear();
+		const unsigned int count();
 	};
     
 	/**
@@ -229,9 +297,6 @@ namespace ECS
 	*/
 	class Manager
 	{
-	public:
-		// const
-		static const std::string DEFAULT_POOL_NAME;
 	private:
 		friend class Deleter<Manager>;
 
@@ -249,16 +314,31 @@ namespace ECS
 		static std::unique_ptr<Manager, ECS::Deleter<Manager>> instance;
 
 		// Entity Pools
-		std::unordered_map<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<EntityPool>>> entityPools;
+		std::unordered_map<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<ECS::EntityPool>>> entityPools;
 
 		// Component ID Map. class type_index <---> CID
 		std::unordered_map<std::type_index, C_UNIQUE_ID> C_UNIQUE_IDMap;
 
 		// Components
-		std::vector</*C_UNIQUE_ID*/std::vector<std::unique_ptr<Component, ComponentDeleter<Component>>>> components;
+		std::vector</*C_UNIQUE_ID*/std::unique_ptr<ECS::ComponentPool, ECS::Deleter<ECS::ComponentPool>>> components;
+
+		/*
+		template<class T>
+		struct WRAP
+		{
+			static std::vector<T> temp;
+		};
+
+		template<class T>
+		struct COMPONENTS
+		{
+			std::vector<std::vector<std::unique_ptr<Component, Deleter<T>>>> components;
+		};
+		*/
 
 		// Component id counter
 		std::vector<C_UNIQUE_ID> componentIdCounter;
+
 		// Wraps id counter if reaches max
 		void wrapIdCounter(const C_UNIQUE_ID cUniqueId);
 
@@ -270,9 +350,18 @@ namespace ECS
         
         // get CID from type info
         const C_UNIQUE_ID getComponentUniqueId(const std::type_info& t);
+
+		// Register component and returns component Unique ID
+		const C_UNIQUE_ID registerComponent(const std::type_info& t);
+
+		// Delete component
+		const bool deleteComponent(Component*& c, const std::type_info& t);
         
-        // Check if entity has component
+        // Check if entity has component type
         const bool hasComponent(Entity* e, const std::type_info& t);
+
+		// Check if entity has component
+		const bool hasComponent(Entity* e, const std::type_info& t, Component* c);
         
         // Get component.
         Component* getComponent(Entity* e, const std::type_info& t);
@@ -281,9 +370,15 @@ namespace ECS
         std::vector<Component*> getComponents(Entity* e, const std::type_info& t);
         
         // Add component to entity
-        const bool addComponent(Entity* e, const std::type_info& t, Component* c);
+		const bool addComponent(Entity* e, const std::type_info& t, Component* c);
+
+		// Remove specific component by id from entity
+		const bool removeComponent(Entity* e, const std::type_info& t, const C_ID componentId);
+
+		// Remove specific component from entity
+		const bool removeComponent(Entity* e, const std::type_info& t, Component* c);
         
-        // Remove compoent from entity
+        // Remove all compoents with type from entity
         const bool removeComponents(Entity* e, const std::type_info& t);
 	public:
 		// Get instance.
@@ -291,6 +386,12 @@ namespace ECS
 
 		// Delete instance.
 		static void deleteInstance();
+
+		// Check if manager is valid
+		static bool isValid();
+
+		// Update function. Call this every tick.
+		void update(const float delta);
 
 		/**
 		*	@name createEntityPool
@@ -301,7 +402,7 @@ namespace ECS
 		*	@see EntityPool::DEFAULT_MAX_POOL_SIZE
 		*	@return True if successfully creates. Else, false.
 		*/
-		EntityPool* createEntityPool(const std::string& name, const int maxSize = EntityPool::DEFAULT_POOL_SIZE);
+		ECS::EntityPool* createEntityPool(const std::string& name, const int maxSize = ECS::DEFAULT_ENTITY_POOL_SIZE);
 
 		const bool addEntityPool(ECS::EntityPool* entityPool);
 
@@ -321,7 +422,7 @@ namespace ECS
 		*	@param name A pool's string name to detach.
 		*	@return EntityPool if exists. Else, nullptr.
 		*/
-		EntityPool* detachEntityPool(const std::string& name = ECS::Manager::DEFAULT_POOL_NAME);
+		ECS::EntityPool* detachEntityPool(const std::string& name);
 
 		/**
 		*	@name getPool
@@ -329,7 +430,7 @@ namespace ECS
 		*	@param name A pool's string name to get.
 		*	@return EntityPool if exists. Else, nullptr.
 		*/
-		EntityPool* getEntityPool(const std::string& name = ECS::Manager::DEFAULT_POOL_NAME);
+		ECS::EntityPool* getEntityPool(const std::string& name = ECS::DEFAULT_ENTITY_POOL_NAME);
 
 		/**
 		*	@name createEntity
@@ -338,7 +439,7 @@ namespace ECS
 		*	@param poolName A string name of pool to add new Entity
 		*	@return Entity if successfully created. Else, nullptr.
 		*/
-		Entity* createEntity(const std::string& poolName = Manager::DEFAULT_POOL_NAME);
+		Entity* createEntity(const std::string& poolName = ECS::DEFAULT_ENTITY_POOL_NAME);
 
 		/**
 		*	@name getEntity
@@ -351,12 +452,41 @@ namespace ECS
         Entity* getEntityById(const E_ID entityId);
 
 		/**
-		*	@name registerComponent
-		*	@brief Registers component type to manager.
-		*	@note This is extra feature for component if you really want let manager know all the component that exsits.
+		*	@name createComponent
+		*	@brief Create component instance.
 		*/
 		template<class T>
-		const C_ID registerComponent(T* component);
+		T* createComponent()
+		{
+			T* t = new T();
+			const C_UNIQUE_ID cUniqueId = this->registerComponent(typeid(T));
+			if (cUniqueId == INVALID_C_UNIQUE_ID)
+			{
+				delete t;
+				return nullptr;
+			}
+			else
+			{
+				t->uniqueId = cUniqueId;
+				return t;
+			}
+		}
+
+		/**
+		*	@name deleteComponent
+		*	@brief Deletes component
+		*/
+		template<class T>
+		const bool deleteComponent(T*& component)
+		{
+			ECS::Component* c = component;
+			bool ret = this->deleteComponent(c, typeid(T));
+			if (ret)
+			{
+				component = nullptr;
+			}
+			return ret;
+		}
         
 		/**
 		*	@name hasComponent
@@ -366,8 +496,19 @@ namespace ECS
         template<class T>
         const bool hasComponent(Entity* e)
         {
-            return hasComponent(e, typeid(T));
+            return this->hasComponent(e, typeid(T));
         }
+
+		/**
+		*	@name hasComponent
+		*	@brief Check if entity has specific component
+		*	@return True if entity has specific component. Else, false.
+		*/
+		template<class T>
+		const bool hasComponent(Entity* e, Component* c)
+		{
+			return this->hasComponent(e, typeid(T), c);
+		}
         
 		/**
 		*	@name getComponent
@@ -378,7 +519,7 @@ namespace ECS
         template<class T>
         T* getComponent(Entity* e)
         {
-            return dynamic_cast<T*>(getComponent(e, typeid(T)));
+            return dynamic_cast<T*>(this->getComponent(e, typeid(T)));
         }
         
 		/**
@@ -390,7 +531,7 @@ namespace ECS
         std::vector<T*> getComponents(Entity* e)
         {
             std::vector<T*> ret;
-            std::vector<Component*> component = getComponents(e, typeid(T));
+            std::vector<Component*> component = this->getComponents(e, typeid(T));
             
 			for(auto c : component)
             {
@@ -408,8 +549,14 @@ namespace ECS
         template<class T>
         const bool addComponent(Entity* e)
         {
-            return addComponent(e, typeid(T), new T());
+            return this->addComponent(e, typeid(T), createComponent<T>());
         }
+
+		template<class T>
+		const bool removeComponent(Entity* e, const C_ID componentId)
+		{
+			return this->removeComponent(e, typeid(T), componentId);
+		}
         
 		/**
 		*	@name addComponent
@@ -419,8 +566,14 @@ namespace ECS
         template<class T>
         const bool addComponent(Entity* e, Component* c)
         {
-            return addComponent(e, typeid(T), c);
+            return this->addComponent(e, typeid(T), c);
         }
+
+		template<class T>
+		const bool removeComponent(Entity* e, Component* c)
+		{
+			return this->removeComponent(e, typeid(T), c);
+		}
         
 		/**
 		*	@name removeComponents
@@ -430,7 +583,7 @@ namespace ECS
         template<class T>
         const bool removeComponents(Entity* e)
         {
-            return removeComponents(e, typeid(T));
+            return this->removeComponents(e, typeid(T));
         }
 
 		/**
@@ -459,8 +612,8 @@ namespace ECS
     {
     private:
         friend class Manager;
-        friend class EntityPool;
-        friend class Deleter<Entity>;
+		friend class EntityPool;
+        friend class Deleter<Entity>;		
     private:
         // Constructor
         Entity();
@@ -484,11 +637,11 @@ namespace ECS
         static E_ID idCounter;
 		static void wrapIdCounter();
         
-        // ID of entity. increases till 4294967295 (0xffffffff) then wrapped to 0.
-        E_ID eId;
+        // ID of entity.
+        E_ID id;
         
         // Index of entity pool for fast access. This is fixed.
-        E_INDEX eIndex;
+        E_INDEX index;
 
 		// Pool name that this entity lives
 		std::string entityPoolName;
@@ -504,8 +657,6 @@ namespace ECS
         
         // get C_INDEX by C_UNIQUE_ID
         void getComponentIndiicesByUniqueId(const C_UNIQUE_ID cId, std::set<C_INDEX>& cIndicies);
-        
-        const bool addCINDEXToCID(const C_ID cId, const C_INDEX cIndex);
 
     public:
         // Kill entity. Once this is called, this entity will not be functional anymore.
@@ -527,6 +678,13 @@ namespace ECS
             Manager* m = Manager::getInstance();
             return m->hasComponent<T>(this);
         }
+
+		template<class T>
+		const bool hasComponent(Component* c)
+		{
+			Manager* m = Manager::getInstance();
+			return m->hasComponent<T>(this, c);
+		}
         
         template<class T>
         T* getComponent()
@@ -548,13 +706,27 @@ namespace ECS
             Manager* m = Manager::getInstance();
             return m->addComponent<T>(this);
         }
-        
+
         template<class T>
         const bool addComponent(Component* c)
         {
             Manager* m = Manager::getInstance();
             return m->addComponent<T>(this, c);
         }
+
+		template<class T>
+		const bool removeComponent(const C_ID componentId)
+		{
+			Manager* m = Manager::getInstance();
+			return m->removeComponent<T>(this, componentId);
+		}
+
+		template<class T>
+		const bool removeComponent(Component* c)
+		{
+			Manager* m = Manager::getInstance();
+			return m->removeComponent<T>(this, c);
+		}
         
         template<class T>
         const bool removeComponents()
@@ -563,6 +735,5 @@ namespace ECS
             return m->removeComponents<T>(this);
         }
     };
-}
-
+};
 #endif

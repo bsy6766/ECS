@@ -1,296 +1,411 @@
-#include <memory>
-#include <iostream>
-#include "src/ECS.h"
-#include <typeinfo>
-#include <typeindex>
-#include <limits>
-#include <cassert>
+#include <gtest\gtest.h>
+#include "src\ECS.h"
 
-
-int main()
+int main(int argc, char** argv)
 {
-	// Get Manager.
-	ECS::Manager* m = nullptr;
-
-	// Getting manager class
-	{
-		// Just call getInstance
-		m = ECS::Manager::getInstance();
-		// Calling this first time will intialize every default setting.
-		// You can't create your own. Manager is singleton class
-		//ECS::Manager* otherM = new ECS::Manager();		// illegal
-		// You can't delete manager by calling delete
-		//delete m;											// illegal
-		// At the end of this file, there is a way to release(delete) manager.
-	}
-
-	// 1. Create entity
-	// How to create entity.
-	{
-		// Create entity. It returns the entity you created. 
-		ECS::Entity* e = m->createEntity();
-		// That's it! But let's check several this.
-		// This entity's id must be 0 because it's the very first one we created
-		const ECS::E_ID eId = e->getId();
-		assert(eId == 0);
-		// Since we didn't tell which EntityPool to use, it's default.
-		const std::string entityPoolName = e->getEntityPoolName();
-		assert(entityPoolName == ECS::Manager::DEFAULT_POOL_NAME);
-		// Check if this is alive
-		const bool alive = e->isAlive();
-		assert(alive);
-	}
-
-	// Clear manager.
-	m->clear();
-
-	// 2. Kill entity
-	{
-		ECS::Entity* e = m->createEntity();
-		// Id must be 0 because we cleared manager above
-		ECS::E_ID eId = e->getId();
-		assert(eId == 0);
-		// You can't call delete on entity. 
-		// delete e;
-		// Use kill() and let manager take care of it.
-		e->kill();
-		// Check entity info
-		eId = e->getId();
-		assert(eId == -1);
-		const bool alive = e->isAlive();
-		assert(alive == false);
-		// You can still try to add components, but it will fail.
-		// Try to create again.
-		ECS::Entity* e2 = m->createEntity();
-		// id is 1 
-		const ECS::E_ID eId2 = e->getId();
-		assert(eId2 == 1);
-
-	}
-
-	// Clear manager.
-	m->clear();
-
-	// 3. Query entity.
-	// Query entity by id.
-	// My recommendation is to keep Entity instance once you create it, but you can just remeber id number and query it anytime
-	{
-		ECS::Entity* e = m->createEntity();
-		// Id must be 0 because we cleared manager above
-		ECS::E_ID eId = e->getId();
-		assert(eId == 0);
-		// Let's pretend you lost entity.
-		e = nullptr;
-		// Welp...but we have id!
-		e = m->getEntityById(eId);
-		assert(e != nullptr);
-		assert(e->getId() == eId);
-		// :)
-	}
-
-	// Clear manager.
-	m->clear();
-
-	const std::string newPoolName = "CUSTOM_POOL";
-	// 4. Create EntityPool
-	// Create your own EntityPool in ECS. You can create entities on specific pool and let System to use specific pool on update.
-	// For example, you can put all the static object in the game and let only collision system to update that pool.
-	{
-		// Create EntityPool. Requries string name and the size of pool. 
-		// Name can not be default ("DEFAULT") name or empty. Also it's case sensitive.
-		// Size is set to 2048 by default and has to be power of 2.
-		ECS::EntityPool* newPool = m->createEntityPool(newPoolName, 200);
-		assert(newPool != nullptr);
-		assert(newPool->getName() == newPoolName);
-		// 200 will rounded to 256
-		unsigned int poolSize = newPool->getPoolSize();
-		assert(poolSize == 256);
-
-		// Creating entity without entity pool name will create on default entity pool
-		ECS::Entity* defaultEntity = m->createEntity();
-		assert(defaultEntity->getEntityPoolName() == ECS::Manager::DEFAULT_POOL_NAME);
-
-		// Using entity pool name will create entity on that entity pool
-		ECS::Entity* customEntity = m->createEntity(newPoolName);
-		assert(customEntity->getEntityPoolName() == newPoolName);
-
-		// Empty entity pool name can't be used
-		ECS::Entity* badEntity = m->createEntity("");
-		assert(badEntity == nullptr);
-
-		// And you can query with name
-		ECS::EntityPool* customPool = m->getEntityPool(newPoolName);
-		assert(customPool != nullptr);
-		assert(customPool->getName() == newPoolName);
-	}
-
-	// 5. Delete EntityPool
-	// Delete EntityPool from manager.
-	{
-		// We didn't clear manager yet, so we still have CUSTOM_POOL.
-		bool success = m->deleteEntityPool(newPoolName);
-		assert(success);
-
-		// Querying deleted entity pool will return nullptr
-		ECS::EntityPool* customPool = m->getEntityPool(newPoolName);
-		assert(customPool == nullptr);
-		
-		// You can't delete default entity pool
-		success = m->deleteEntityPool(ECS::Manager::DEFAULT_POOL_NAME);
-		assert(!success);
-	}
-
-	ECS::EntityPool* newPool = nullptr;
-	// 6. Detach EntityPool
-	// Detach EntityPool from manager. This will not delete EntityPool but simply detach from manager so you can have it on your hand.
-	{
-		// First add new pool because there are none. Use CUSTOM_POOL as name
-		newPool = m->createEntityPool(newPoolName, 20);
-		// Size will be rounded up to 32
-		assert(newPool->getPoolSize() == 32);
-
-		// Just for fun, add entity
-		ECS::Entity* e = m->createEntity(newPoolName);
-
-		// Detach
-		ECS::EntityPool* detachedPool = m->detachEntityPool(newPoolName);
-		assert(detachedPool->getName() == newPoolName);
-
-		// Once you detach, you can't no longer query from manager
-		assert(m->getEntityPool(newPoolName) == nullptr);
-
-		// Also you can't detach default entity pool, empty or uneixisting name
-		assert(m->detachEntityPool(ECS::Manager::DEFAULT_POOL_NAME) == nullptr);
-		assert(m->detachEntityPool("") == nullptr);
-		assert(m->detachEntityPool("Hello world!") == nullptr);
-
-		// Same name. same size
-		assert(newPool->getName() == detachedPool->getName());
-		assert(newPool->getPoolSize() == detachedPool->getPoolSize());
-		assert(newPool->getAliveEntityCount() == detachedPool->getAliveEntityCount());
-		
-		// Query entity and compare
-		ECS::Entity* e2 = detachedPool->getEntityById(e->getId());
-		assert(e2->getId() == e->getId());
-		assert(e2->getEntityPoolName() == e->getEntityPoolName());
-	}
-
-	// 7. Add EntityPool
-	// We can add EntityPool itself rather than creating.
-	{
-		// Use newPool from above.
-		assert(newPool->getName() == newPoolName);
-
-		// Add EntityPool to manager
-		bool success = m->addEntityPool(newPool);
-		assert(success);
-
-		// You can't added it again with same name
-		ECS::EntityPool* sameNamePool = m->createEntityPool(newPoolName);
-		assert(sameNamePool == nullptr);
-
-		// You can't add same thing twice
-		success = m->addEntityPool(newPool);
-		assert(success == false);
-	}
-
-	// clear manager
-	m->clear();
-
-	// Example of creating test component
-	class TestComponent : public ECS::Component
-	{
-	public:
-		TestComponent::TestComponent() : ECS::Component(), data(0) {};
-		TestComponent::~TestComponent() {};
-		int data;
-
-		virtual void update(const float delta) override {}
-	};
-
-	// 8. Create component
-	// Create component
-	{
-		// Create instance
-		TestComponent* tc = new TestComponent();
-		// Try to get component id, but it's invalid
-		assert(tc->getId() == ECS::INVALID_C_ID);
-		// What? This is becuase manager doesn't know if TestComponent exists.
-		// Manager only tracks that has be exposed to manager class. 
-
-		// You can't just create base component
-		//ECS::Component* badComp = new ECS::Component();			// illegal
-
-		// delete for now.
-		delete tc;
-	}
-
-	// 9. Add one component
-	// Add one component to entity. 
-	{
-		// Create instance
-		TestComponent* tc = new TestComponent();
-		// Try to get component id, but it's invalid
-		assert(tc->getId() == ECS::INVALID_C_ID);
-		// New entity
-		ECS::Entity* e = m->createEntity();
-
-		// Check if entity already has this type of component
-		bool hasTestComp = e->hasComponent<TestComponent>();
-		// Ofcourse doesn't have it because we naver added it.
-		assert(hasTestComp == false);
-
-		// Add component to entity
-		bool success = e->addComponent<TestComponent>(tc);
-		assert(success);
-
-		// Because this is the first TestComponent component we created, id will be 0
-		assert(tc->getId() == 0);
-
-		// Change data
-		tc->data = 5;
-
-		// You can query like
-		TestComponent* tc2 = e->getComponent<TestComponent>();
-		assert(tc->getId() == tc2->getId());
-		assert(tc->data == tc2->data);
-
-		m->printComponentsInfo();
-	}
-
-	// clear manager
-	m->clear();
-
-	// 10. Add mutliple same components
-	{
-		// New entity
-		ECS::Entity* e = m->createEntity();
-
-		for (int i = 0; i < 5; i++)
-		{
-			e->addComponent<TestComponent>();
-		}
-
-		// Get allcomponents
-		std::vector<TestComponent*> components = e->getComponents<TestComponent>();
-
-		for (int i = 0; i < 5; i++)
-		{
-			delete components.at(i);
-		}
-
-		m->printComponentsInfo();
-	}
-
-	// Final. Delete manager
-	{
-		// Don't forget to delete instance. 
-		// But don't worry! It will be deleted itself even if you forget ;)
-		ECS::Manager::deleteInstance();
-	}
-
-
+	testing::InitGoogleTest(&argc, argv);
+	RUN_ALL_TESTS();
 	system("pause");
+	return 0;
+}
 
-	return -1;
+class TestC1 : public ECS::Component
+{
+public:
+	TestC1();
+	~TestC1() = default;
+
+	int data;
+
+	void update(const float delta) override {};
+};
+
+TestC1::TestC1() : ECS::Component(), data(0) {}
+
+class TestC2 : public ECS::Component
+{
+public:
+	TestC2();
+	~TestC2() = default;
+
+	int data;
+
+	void update(const float delta) override {};
+};
+
+TestC2::TestC2() : ECS::Component(), data(0) {}
+
+ECS::Manager* m = nullptr;
+
+TEST(CREATION_TEST, MANAGER)
+{
+	m = ECS::Manager::getInstance();
+	ASSERT_NE(m, nullptr);
+	ASSERT_TRUE(ECS::Manager::isValid());
+
+	m->clear();
+}
+
+TEST(CREATION_TEST, DEFAULT_ENTITY_POOL)
+{
+	ECS::EntityPool* entityPool = m->getEntityPool();
+	ASSERT_EQ(entityPool->getName(), ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_EQ(entityPool->getPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
+	ASSERT_EQ(entityPool->countAliveEntity(), 0);
+
+	m->clear();
+}
+
+TEST(CREATION_TEST, SINGLE_ENTITY)
+{
+	ECS::Entity* e = m->createEntity();
+	ASSERT_NE(e, nullptr);
+	ASSERT_EQ(e->getId(), 0);
+
+	m->clear();
+}
+
+TEST(CREATION_TEST, MULTIPLE_ENTITIES)
+{
+	for (int i = 0; i < 20; i++)
+	{
+		ECS::Entity* e = m->createEntity();
+		ASSERT_NE(e, nullptr);
+		ASSERT_EQ(e->getId(), i);
+	}
+
+	m->clear();
+}
+
+TEST(CREATION_TEST, ENTITY_POOL)
+{
+	const std::string testPoolName = "TEST0";
+	ECS::EntityPool* newPool = m->createEntityPool(testPoolName, 200);
+	ASSERT_EQ(newPool->getPoolSize(), 256);
+	ASSERT_EQ(newPool->getName(), testPoolName);
+}
+
+TEST(CREATION_TEST, MULTIPLE_ENTITY_POOLS)
+{
+	for (int i = 1; i < 4; i++)
+	{
+		const std::string testPoolName = "TEST" + std::to_string(i);
+		ECS::EntityPool* newPool = m->createEntityPool(testPoolName, 200);
+		ASSERT_EQ(newPool->getPoolSize(), 256);
+		ASSERT_EQ(newPool->getName(), testPoolName);
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		const std::string testPoolName = "TEST" + std::to_string(i);
+		ECS::EntityPool* testPool = m->getEntityPool(testPoolName);
+		ASSERT_TRUE(testPool != nullptr);
+		ASSERT_EQ(testPool->getPoolSize(), 256);
+		ASSERT_EQ(testPool->getName(), testPoolName);
+	}
+}
+
+TEST(CREATION_TEST, SINGLE_COMPONENT)
+{
+	TestC1* testComponent = m->createComponent<TestC1>();
+	ASSERT_EQ(testComponent->getUniqueId(), 0);
+	ASSERT_EQ(testComponent->getId(), ECS::INVALID_C_ID);
+	ASSERT_EQ(testComponent->getOwnerId(), ECS::INVALID_E_ID);
+
+	m->clear();
+}
+
+TEST(CREATION_TEST, MULTIPLE_COMPONENTS)
+{
+	for (int i = 0; i < 20; i++)
+	{
+		TestC1* testComponent = m->createComponent<TestC1>();
+		ASSERT_EQ(testComponent->getUniqueId(), 0);
+		ASSERT_EQ(testComponent->getId(), ECS::INVALID_C_ID);
+		ASSERT_EQ(testComponent->getOwnerId(), ECS::INVALID_E_ID);
+	}
+
+	m->clear();
+}
+
+
+
+TEST(DELETION_TEST, MANAGER)
+{
+	ECS::Manager::deleteInstance();
+	ASSERT_FALSE(ECS::Manager::isValid());
+}
+
+TEST(DELETION_TEST, ENTITY)
+{
+	m = ECS::Manager::getInstance();
+	ECS::Entity* e = m->createEntity();
+	ASSERT_TRUE(e != nullptr);
+
+	e->kill();
+	m->update(0);
+
+	ASSERT_EQ(e->getId(), ECS::INVALID_E_ID);
+	ASSERT_EQ(e->isAlive(), false);
+}
+
+TEST(DELETION_TEST, ENTITY_POOL)
+{
+	ECS::EntityPool* testPool1 = m->createEntityPool("TEST1", 128);
+
+	bool success = m->deleteEntityPool("TEST1");
+	ASSERT_TRUE(success);
+
+	testPool1 = m->getEntityPool("TEST1");
+	ASSERT_EQ(testPool1, nullptr);
+}
+
+TEST(DELETION_TEST, COMPONENT)
+{
+	m->clear();
+	auto newComp = m->createComponent<TestC1>();
+	ASSERT_EQ(newComp->getUniqueId(), 0);
+	m->deleteComponent<TestC1>(newComp);
+	ASSERT_EQ(newComp, nullptr);
+}
+
+
+
+TEST(FUNCTION_TEST, MANAGER_CLEAR)
+{
+	m = ECS::Manager::getInstance();
+	ECS::Entity* e = m->createEntity();
+	ASSERT_NE(e, nullptr);
+	const ECS::E_ID eId = e->getId();
+	ASSERT_EQ(eId, 0);
+
+	m->clear();
+	e = m->getEntityById(eId);
+	ASSERT_EQ(e, nullptr);
+
+	ECS::EntityPool* defaultPool = m->getEntityPool();
+	ASSERT_TRUE(defaultPool != nullptr);
+	ASSERT_EQ(defaultPool->getName(), ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_EQ(defaultPool->getPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
+
+	m->clear();
+}
+
+TEST(FUNCTION_TEST, MANAGER_IS_VALID)
+{
+	m->clear();
+	m = ECS::Manager::getInstance();
+	ASSERT_TRUE(m->isValid());
+	ECS::Manager::deleteInstance();
+	ASSERT_FALSE(m->isValid());
+	m = ECS::Manager::getInstance();
+	ASSERT_TRUE(m->isValid());
+}
+
+TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY_POOL_NAME_TEST)
+{
+	m->clear();
+	ECS::EntityPool* defaultPool = m->createEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_EQ(defaultPool, nullptr);
+	ECS::EntityPool* emptyNamePool = m->createEntityPool("");
+	ASSERT_EQ(emptyNamePool, nullptr);
+	const std::string validName = " !%ASD./GA#? 32 _-";
+	ECS::EntityPool* validPool = m->createEntityPool(validName, 2);
+	ASSERT_NE(validPool, nullptr);
+}
+
+TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY_POOL_SIZE_TEST)
+{
+	m->clear();
+	ECS::EntityPool* defaultPool = m->getEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_EQ(defaultPool->getPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
+	ECS::EntityPool* smallPool = m->createEntityPool("SMALL", 2);
+	ASSERT_EQ(smallPool->getPoolSize(), 2);
+	ECS::EntityPool* largePool = m->createEntityPool("LARGE", 4096);
+	ASSERT_EQ(largePool->getPoolSize(), 4096);
+	ECS::EntityPool* sizeRoundUpPool = m->createEntityPool("SIZE_ROUND_UP_POOL", 6);
+	ASSERT_EQ(sizeRoundUpPool->getPoolSize(), 8);
+}
+
+TEST(FUNCTION_TEST, MANAGER_DETACH_ENTITY_POOL)
+{
+	m->clear();
+
+	ECS::EntityPool* defaultPool = m->detachEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_TRUE(defaultPool == nullptr);
+
+	const std::string testPoolName = "TEST";
+	m->createEntityPool(testPoolName, 2);
+
+	ECS::EntityPool* testPool = m->detachEntityPool(testPoolName);
+	ASSERT_TRUE(testPool != nullptr);
+	ASSERT_EQ(testPool->getName(), testPoolName);
+
+	ECS::EntityPool* testPoolAgain = m->getEntityPool(testPoolName);
+	ASSERT_EQ(testPoolAgain, nullptr);
+
+	ECS::EntityPool* emptyName = m->detachEntityPool("");
+	ASSERT_EQ(emptyName, nullptr);
+}
+
+TEST(FUNCTION_TEST, MANAGER_GET_ENTITY_POOL)
+{
+	m->clear();
+
+	ECS::EntityPool* defaultPool = m->getEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_NE(defaultPool, nullptr);
+
+	ECS::EntityPool* emptyNamePool = m->getEntityPool("");
+	ASSERT_EQ(emptyNamePool, nullptr);
+
+	ECS::EntityPool* wrongNamePool = m->getEntityPool("WRONG_NAME!");
+	ASSERT_EQ(wrongNamePool, nullptr);
+}
+
+TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY)
+{
+	m->clear();
+
+	ECS::Entity* e1 = m->createEntity();
+	ASSERT_EQ(e1->getId(), 0);
+	ASSERT_EQ(e1->hasComponent<TestC1>(), false);
+	ASSERT_EQ(e1->getEntityPoolName(), ECS::DEFAULT_ENTITY_POOL_NAME);
+
+	ECS::EntityPool* pool = m->createEntityPool("NEW", 4);
+
+	ECS::Entity* e2 = m->createEntity("NEW");
+	ASSERT_EQ(e2->getId(), 1);
+	ASSERT_EQ(e2->hasComponent<TestC1>(), false);
+	ASSERT_EQ(e2->getEntityPoolName(), "NEW");
+
+	ECS::Entity* e3 = m->createEntity("");
+	ASSERT_EQ(e3, nullptr);
+}
+
+TEST(FUNCTION_TEST, MANAGER_GET_ENTITY_BY_ID)
+{
+	m->clear();
+
+	std::vector<ECS::E_ID> eIds;
+
+	for (int i = 0; i < 5; i++)
+	{
+		ECS::Entity* e = m->createEntity();
+		eIds.push_back(e->getId());
+	}
+
+	for (auto eId : eIds)
+	{
+		ECS::Entity* e = m->getEntityById(eId);
+		ASSERT_EQ(e->getId(), eId);
+	}
+
+	ECS::Entity* e = m->getEntityById(20);
+	ASSERT_EQ(e, nullptr);
+}
+
+TEST(FUNCTION_TEST, ADD_COMPONENT)
+{
+	m->clear();
+	ECS::Entity* e = m->createEntity();
+	bool success = e->addComponent<TestC1>();
+	ASSERT_TRUE(success);
+
+	bool fail = e->addComponent<TestC1>(nullptr);
+	ASSERT_FALSE(fail);
+}
+
+TEST(FUNCTION_TEST, HAS_COMPONENT)
+{
+	m->clear();
+
+	ECS::Entity* e = m->createEntity();
+	ASSERT_EQ(e->hasComponent<TestC1>(), false);
+
+	TestC2* tc = m->createComponent<TestC2>();
+	bool success = e->addComponent<TestC2>(tc);
+	ASSERT_TRUE(success);
+	ASSERT_EQ(e->hasComponent<TestC1>(), false);
+	ASSERT_EQ(e->hasComponent<TestC2>(), true);
+
+	bool hasComponent = e->hasComponent<TestC2>(tc);
+	ASSERT_TRUE(hasComponent);
+}
+
+TEST(FUNCTION_TEST, GET_COMPONENT)
+{
+	m->clear();
+
+	ECS::Entity* e = m->createEntity();
+	bool success = e->addComponent<TestC1>();
+	ASSERT_TRUE(success);
+
+	TestC1* tc1 = e->getComponent<TestC1>();
+	ASSERT_NE(tc1, nullptr);
+	TestC2* tc2 = e->getComponent<TestC2>();
+	ASSERT_EQ(tc2, nullptr);
+
+	for (int i = 0; i < 5; i++)
+	{
+		e->addComponent<TestC1>();
+	}
+
+	TestC1* firstTC1Comp = e->getComponent<TestC1>();
+
+	std::vector<TestC1*> components = e->getComponents<TestC1>();
+
+	ASSERT_EQ(components.front()->getId(), firstTC1Comp->getId());
+	ASSERT_EQ(components.front()->getUniqueId(), firstTC1Comp->getUniqueId());
+
+	for (auto component : components)
+	{
+		ASSERT_NE(component, nullptr);
+		ASSERT_EQ(component->getUniqueId(), tc1->getUniqueId());
+		ASSERT_EQ(component->getOwnerId(), tc1->getOwnerId());
+	}
+
+	std::vector<TestC2*> badComponents = e->getComponents<TestC2>();
+	ASSERT_TRUE(badComponents.empty());
+}
+
+TEST(FUNCTION_TEST, REMOVE_COMPONENT)
+{
+	m->clear();
+
+	ECS::Entity* e = m->createEntity();
+	TestC1* tc1 = m->createComponent<TestC1>();
+	bool success = e->addComponent<TestC1>(tc1);
+	ASSERT_TRUE(success);
+
+	success = e->removeComponent<TestC1>(tc1->getId());
+	ASSERT_TRUE(success);
+	success = e->removeComponent<TestC1>(tc1->getId());
+	ASSERT_FALSE(success);
+
+	TestC1* tc11 = e->getComponent<TestC1>();
+	ASSERT_EQ(tc11, nullptr);
+
+	for (int i = 0; i < 5; i++)
+	{
+		e->addComponent<TestC1>();
+	}
+
+	std::vector<TestC1*> comps1 = e->getComponents<TestC1>();
+	ASSERT_EQ(comps1.size(), 5);
+
+	TestC1* tc111 = e->getComponent<TestC1>();
+	ASSERT_NE(tc111, nullptr);
+
+	success = e->removeComponent<TestC1>(tc111);
+	ASSERT_TRUE(success);
+
+	success = e->removeComponents<TestC1>();
+	ASSERT_TRUE(success);
+
+	std::vector<TestC1*> comps3 = e->getComponents<TestC1>();
+	ASSERT_EQ(comps3.size(), 0);
+
+	success = e->removeComponents<TestC1>();
+	ASSERT_FALSE(success);
+
 }
