@@ -602,7 +602,6 @@ namespace ECS
 		std::function<void(const ERROR_CODE, const std::string&)> errorCallback;
 	};
     
-    
     /**
      *	@class Entity
      *	@brief Entity is simply an pack of numbers.
@@ -670,6 +669,9 @@ namespace ECS
         
         // Check if this entity is alive
         const bool isAlive();
+
+		// Get signature
+		const Signature getSignature();
         
         // Check if Entity has Component
         template<class T>

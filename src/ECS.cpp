@@ -1028,6 +1028,11 @@ const bool ECS::Entity::isAlive()
 	return this->alive;
 }
 
+const Signature ECS::Entity::getSignature()
+{
+	return this->signature;
+}
+
 //============================================================================================
 
 C_ID ECS::Component::uniqueIdCounter = 0;

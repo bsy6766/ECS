@@ -409,3 +409,17 @@ TEST(FUNCTION_TEST, REMOVE_COMPONENT)
 	ASSERT_FALSE(success);
 
 }
+
+TEST(FUNCTION_TEST, SIGNATURE)
+{
+	m->clear();
+
+	ECS::Entity* e = m->createEntity();
+
+	ASSERT_EQ(e->getSignature(), 0);
+
+	TestC1* tc1 = m->createComponent<TestC1>();
+	e->addComponent<TestC1>(tc1);
+
+	ASSERT_EQ(e->getSignature()[tc1->getUniqueId()], 1);
+}
