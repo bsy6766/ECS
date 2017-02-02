@@ -130,7 +130,7 @@ namespace ECS
 	protected:
 		// Protected constructor. Can't create bass class from out side
 		Component();
-	private:
+
 		void* operator new(size_t sz) throw (std::bad_alloc)
 		{
 			void* mem = std::malloc(sz);
@@ -144,6 +144,7 @@ namespace ECS
 		{
 			std::free(ptr);
 		}
+	private:
 
 		// Component Id
 		C_ID id;

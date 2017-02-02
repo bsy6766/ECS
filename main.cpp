@@ -26,7 +26,7 @@ class TestC2 : public ECS::Component
 {
 public:
 	TestC2();
-	~TestC2() = default;
+	~TestC2();
 
 	int data;
 
@@ -34,6 +34,8 @@ public:
 };
 
 TestC2::TestC2() : ECS::Component(), data(0) {}
+
+TestC2::~TestC2() {}
 
 ECS::Manager* m = nullptr;
 
@@ -421,5 +423,5 @@ TEST(FUNCTION_TEST, SIGNATURE)
 	TestC1* tc1 = m->createComponent<TestC1>();
 	e->addComponent<TestC1>(tc1);
 
-	ASSERT_EQ(e->getSignature()[tc1->getUniqueId()], 1);
+	ASSERT_TRUE(e->getSignature()[tc1->getUniqueId()] == true);
 }
