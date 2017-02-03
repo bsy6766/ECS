@@ -8,8 +8,6 @@ public:
 	~TestC1() = default;
 
 	int data;
-
-	void update(const float delta) override {};
 };
 
 TestC1::TestC1() : ECS::Component(), data(0) {}
@@ -21,8 +19,6 @@ public:
 	~TestC2();
 
 	int data;
-
-	void update(const float delta) override {};
 };
 
 TestC2::TestC2() : ECS::Component(), data(0) {}
@@ -38,7 +34,95 @@ public:
 	void update(const float delta, std::vector<ECS::Entity*>& entities) override {};
 };
 
-TestSystem1::TestSystem1() : System() {}
+TestSystem1::TestSystem1() : System(0) {}
+
+class TestSystem2 : public ECS::System
+{
+public:
+	TestSystem2();
+	~TestSystem2() = default;
+
+	void update(const float delta, std::vector<ECS::Entity*>& entities) override {};
+};
+
+TestSystem2::TestSystem2() : System(1) {}
+
+class TestSystem3 : public ECS::System
+{
+public:
+	TestSystem3();
+	~TestSystem3() = default;
+
+	void update(const float delta, std::vector<ECS::Entity*>& entities) override {};
+};
+
+TestSystem3::TestSystem3() : System(0) {}
+
+
+class HealthComponent : public ECS::Component
+{
+public:
+	HealthComponent();
+	~HealthComponent() = default;
+
+	int health;
+};
+
+HealthComponent::HealthComponent() : ECS::Component(), health(10) {}
+
+class HealthSystem : public ECS::System
+{
+public:
+	HealthSystem();
+	~HealthSystem() = default;
+
+	void update(const float delta, std::vector<ECS::Entity*>& entities) override;
+};
+
+HealthSystem::HealthSystem() : ECS::System(0)
+{}
+
+void HealthSystem::update(const float delta, std::vector<ECS::Entity*>& entities)
+{
+	for (auto& entity : entities)
+	{
+		auto healthComp = entity->getComponent<HealthComponent>();
+		healthComp->health++;
+	}
+}
+
+class PositionComponent : public ECS::Component
+{
+public:
+	PositionComponent();
+	~PositionComponent() = default;
+
+	float x;
+	float y;
+};
+
+PositionComponent::PositionComponent() : ECS::Component(), x(0), y(0) {}
+
+class MovementSystem : public ECS::System
+{
+public:
+	MovementSystem();
+	~MovementSystem() = default;
+
+	void update(const float delta, std::vector<ECS::Entity*>& entities) override;
+};
+
+MovementSystem::MovementSystem() : ECS::System(1)
+{}
+
+void MovementSystem::update(const float delta, std::vector<ECS::Entity*>& entities)
+{
+	for (auto& entity : entities)
+	{
+		auto posComp = entity->getComponent<PositionComponent>();
+		posComp->x += 1.0f;
+	}
+}
 
 ECS::Manager* m = nullptr;
 
@@ -52,96 +136,86 @@ int main(int argc, char** argv)
 	system("pause");
 	return 0;
 }
-/*
+
 TEST(CREATION_TEST, MANAGER)
 {
 	m = ECS::Manager::getInstance();
 	ASSERT_NE(m, nullptr);
 	ASSERT_TRUE(ECS::Manager::isValid());
-
-	m->clear();
 }
 
 TEST(CREATION_TEST, DEFAULT_ENTITY_POOL)
 {
-	ECS::EntityPool* entityPool = m->getEntityPool();
-	ASSERT_EQ(entityPool->getName(), ECS::DEFAULT_ENTITY_POOL_NAME);
-	ASSERT_EQ(entityPool->getPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
-	ASSERT_EQ(entityPool->countAliveEntity(), 0);
-
 	m->clear();
+
+	ASSERT_TRUE(m->hasEntityPoolName(ECS::DEFAULT_ENTITY_POOL_NAME));
+}
+
+TEST(CREATION_TEST, ADDITIONAL_ENTITY_POOL)
+{
+	m->clear();
+
+	ASSERT_TRUE(m->createEntityPool("TEST", 2));
+	ASSERT_FALSE(m->createEntityPool("TEST2", 0));
 }
 
 TEST(CREATION_TEST, SINGLE_ENTITY)
 {
 	ECS::Entity* e = m->createEntity();
 	ASSERT_NE(e, nullptr);
-	ASSERT_EQ(e->getId(), 0);
-
-	m->clear();
 }
 
 TEST(CREATION_TEST, MULTIPLE_ENTITIES)
 {
+	m->clear();
+
 	for (int i = 0; i < 20; i++)
 	{
 		ECS::Entity* e = m->createEntity();
 		ASSERT_NE(e, nullptr);
-		ASSERT_EQ(e->getId(), i);
 	}
 
-	m->clear();
-}
-
-TEST(CREATION_TEST, ENTITY_POOL)
-{
-	const std::string testPoolName = "TEST0";
-	ECS::EntityPool* newPool = m->createEntityPool(testPoolName, 200);
-	ASSERT_EQ(newPool->getPoolSize(), 256);
-	ASSERT_EQ(newPool->getName(), testPoolName);
-}
-
-TEST(CREATION_TEST, MULTIPLE_ENTITY_POOLS)
-{
-	for (int i = 1; i < 4; i++)
+	for (int i = 0; i < 20; i++)
 	{
-		const std::string testPoolName = "TEST" + std::to_string(i);
-		ECS::EntityPool* newPool = m->createEntityPool(testPoolName, 200);
-		ASSERT_EQ(newPool->getPoolSize(), 256);
-		ASSERT_EQ(newPool->getName(), testPoolName);
-	}
-
-	for (int i = 0; i < 4; i++)
-	{
-		const std::string testPoolName = "TEST" + std::to_string(i);
-		ECS::EntityPool* testPool = m->getEntityPool(testPoolName);
-		ASSERT_TRUE(testPool != nullptr);
-		ASSERT_EQ(testPool->getPoolSize(), 256);
-		ASSERT_EQ(testPool->getName(), testPoolName);
+		ECS::Entity* e = m->getEntityById(i);
+		ASSERT_NE(e, nullptr);
 	}
 }
 
 TEST(CREATION_TEST, SINGLE_COMPONENT)
 {
-	TestC1* testComponent = m->createComponent<TestC1>();
-	ASSERT_EQ(testComponent->getUniqueId(), 0);
-	ASSERT_EQ(testComponent->getId(), ECS::INVALID_C_ID);
-	ASSERT_EQ(testComponent->getOwnerId(), ECS::INVALID_E_ID);
-
 	m->clear();
+
+	TestC1* testComponent = m->createComponent<TestC1>();
+	ASSERT_NE(testComponent, nullptr);
 }
 
 TEST(CREATION_TEST, MULTIPLE_COMPONENTS)
 {
+	m->clear();
+
 	for (int i = 0; i < 20; i++)
 	{
-		TestC1* testComponent = m->createComponent<TestC1>();
-		ASSERT_EQ(testComponent->getUniqueId(), 0);
-		ASSERT_EQ(testComponent->getId(), ECS::INVALID_C_ID);
-		ASSERT_EQ(testComponent->getOwnerId(), ECS::INVALID_E_ID);
+		TestC1* t = m->createComponent<TestC1>();
+		ASSERT_NE(t, nullptr);
+	}
+}
+
+TEST(CREATION_TEST, MULTIPLE_DIFFERENT_COMPONENTS)
+{
+	m->clear();
+
+	for (int i = 0; i < 20; i++)
+	{
+		TestC1* t = m->createComponent<TestC1>();
+		ASSERT_NE(t, nullptr);
 	}
 
-	m->clear();
+	for (int i = 0; i < 20; i++)
+	{
+		TestC2* t = m->createComponent<TestC2>();
+		ASSERT_NE(t, nullptr);
+	}
 }
 
 TEST(CREATION_TEST, SYSTEM)
@@ -149,7 +223,6 @@ TEST(CREATION_TEST, SYSTEM)
 	m->clear();
 	TestSystem1* ts1 = m->createSystem<TestSystem1>();
 	ASSERT_NE(ts1, nullptr);
-	ASSERT_EQ(ts1->getId(), 0);
 }
 
 
@@ -167,21 +240,9 @@ TEST(DELETION_TEST, ENTITY)
 	ASSERT_TRUE(e != nullptr);
 
 	e->kill();
-	m->update(0);
 
 	ASSERT_EQ(e->getId(), ECS::INVALID_E_ID);
 	ASSERT_EQ(e->isAlive(), false);
-}
-
-TEST(DELETION_TEST, ENTITY_POOL)
-{
-	ECS::EntityPool* testPool1 = m->createEntityPool("TEST1", 128);
-
-	bool success = m->deleteEntityPool("TEST1");
-	ASSERT_TRUE(success);
-
-	testPool1 = m->getEntityPool("TEST1");
-	ASSERT_EQ(testPool1, nullptr);
 }
 
 TEST(DELETION_TEST, COMPONENT)
@@ -200,29 +261,30 @@ TEST(DELETION_TEST, SYSTEM)
 
 	m->deleteSystem<TestSystem1>(ts1);
 	ASSERT_EQ(ts1, nullptr);
-
 }
 
 
 
 TEST(FUNCTION_TEST, MANAGER_CLEAR)
 {
+	m->clear();
 	m = ECS::Manager::getInstance();
 	ECS::Entity* e = m->createEntity();
 	ASSERT_NE(e, nullptr);
 	const ECS::E_ID eId = e->getId();
 	ASSERT_EQ(eId, 0);
 
+	m->createEntityPool("TEST", 2);
+
+	auto system = m->createSystem<TestSystem1>();
+
 	m->clear();
+
 	e = m->getEntityById(eId);
 	ASSERT_EQ(e, nullptr);
 
-	ECS::EntityPool* defaultPool = m->getEntityPool();
-	ASSERT_TRUE(defaultPool != nullptr);
-	ASSERT_EQ(defaultPool->getName(), ECS::DEFAULT_ENTITY_POOL_NAME);
-	ASSERT_EQ(defaultPool->getPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
-
-	m->clear();
+	ASSERT_FALSE(m->hasEntityPoolName("TEST"));
+	ASSERT_FALSE(m->hasSystem<TestSystem1>());
 }
 
 TEST(FUNCTION_TEST, MANAGER_IS_VALID)
@@ -239,61 +301,28 @@ TEST(FUNCTION_TEST, MANAGER_IS_VALID)
 TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY_POOL_NAME_TEST)
 {
 	m->clear();
-	ECS::EntityPool* defaultPool = m->createEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
-	ASSERT_EQ(defaultPool, nullptr);
-	ECS::EntityPool* emptyNamePool = m->createEntityPool("");
-	ASSERT_EQ(emptyNamePool, nullptr);
+	bool success = m->createEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
+	ASSERT_FALSE(success);
+	success = m->createEntityPool("");
+	ASSERT_FALSE(success);
 	const std::string validName = " !%ASD./GA#? 32 _-";
-	ECS::EntityPool* validPool = m->createEntityPool(validName, 2);
-	ASSERT_NE(validPool, nullptr);
+	success = m->createEntityPool(validName, 2);
+	ASSERT_TRUE(success);
 }
 
 TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY_POOL_SIZE_TEST)
 {
 	m->clear();
-	ECS::EntityPool* defaultPool = m->getEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
-	ASSERT_EQ(defaultPool->getPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
-	ECS::EntityPool* smallPool = m->createEntityPool("SMALL", 2);
-	ASSERT_EQ(smallPool->getPoolSize(), 2);
-	ECS::EntityPool* largePool = m->createEntityPool("LARGE", 4096);
-	ASSERT_EQ(largePool->getPoolSize(), 4096);
-	ECS::EntityPool* sizeRoundUpPool = m->createEntityPool("SIZE_ROUND_UP_POOL", 6);
-	ASSERT_EQ(sizeRoundUpPool->getPoolSize(), 8);
-}
-
-TEST(FUNCTION_TEST, MANAGER_DETACH_ENTITY_POOL)
-{
-	m->clear();
-
-	ECS::EntityPool* defaultPool = m->detachEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
-	ASSERT_TRUE(defaultPool == nullptr);
-
-	const std::string testPoolName = "TEST";
-	m->createEntityPool(testPoolName, 2);
-
-	ECS::EntityPool* testPool = m->detachEntityPool(testPoolName);
-	ASSERT_TRUE(testPool != nullptr);
-	ASSERT_EQ(testPool->getName(), testPoolName);
-
-	ECS::EntityPool* testPoolAgain = m->getEntityPool(testPoolName);
-	ASSERT_EQ(testPoolAgain, nullptr);
-
-	ECS::EntityPool* emptyName = m->detachEntityPool("");
-	ASSERT_EQ(emptyName, nullptr);
-}
-
-TEST(FUNCTION_TEST, MANAGER_GET_ENTITY_POOL)
-{
-	m->clear();
-
-	ECS::EntityPool* defaultPool = m->getEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
-	ASSERT_NE(defaultPool, nullptr);
-
-	ECS::EntityPool* emptyNamePool = m->getEntityPool("");
-	ASSERT_EQ(emptyNamePool, nullptr);
-
-	ECS::EntityPool* wrongNamePool = m->getEntityPool("WRONG_NAME!");
-	ASSERT_EQ(wrongNamePool, nullptr);
+	ASSERT_EQ(m->getEntityPoolSize(), ECS::DEFAULT_ENTITY_POOL_SIZE);
+	bool success = m->createEntityPool("SMALL", 2);
+	ASSERT_TRUE(success);
+	ASSERT_EQ(m->getEntityPoolSize("SMALL"), 2);
+	success = m->createEntityPool("LARGE", 4096);
+	ASSERT_TRUE(success);
+	ASSERT_EQ(m->getEntityPoolSize("LARGE"), 4096);
+	success = m->createEntityPool("ROUND_POW_2", 6);
+	ASSERT_TRUE(success);
+	ASSERT_EQ(m->getEntityPoolSize("ROUND_POW_2"), 8);
 }
 
 TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY)
@@ -305,7 +334,7 @@ TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY)
 	ASSERT_EQ(e1->hasComponent<TestC1>(), false);
 	ASSERT_EQ(e1->getEntityPoolName(), ECS::DEFAULT_ENTITY_POOL_NAME);
 
-	ECS::EntityPool* pool = m->createEntityPool("NEW", 4);
+	bool success = m->createEntityPool("NEW", 4);
 
 	ECS::Entity* e2 = m->createEntity("NEW");
 	ASSERT_EQ(e2->getId(), 1);
@@ -313,6 +342,17 @@ TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY)
 	ASSERT_EQ(e2->getEntityPoolName(), "NEW");
 
 	ECS::Entity* e3 = m->createEntity("");
+	ASSERT_EQ(e3, nullptr);
+}
+
+TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY_ON_FULL_ENTITY_POOL)
+{
+	m->clear();
+
+	bool success = m->createEntityPool("TWO", 2);
+	ECS::Entity* e1 = m->createEntity("TWO");
+	ECS::Entity* e2 = m->createEntity("TWO");
+	ECS::Entity* e3 = m->createEntity("TWO");
 	ASSERT_EQ(e3, nullptr);
 }
 
@@ -336,6 +376,43 @@ TEST(FUNCTION_TEST, MANAGER_GET_ENTITY_BY_ID)
 
 	ECS::Entity* e = m->getEntityById(20);
 	ASSERT_EQ(e, nullptr);
+}
+
+TEST(FUNCTION_TEST, MANAGER_GET_ENTITY_BY_ID_NONE_DEFAULT_ENTITY_POOL)
+{
+	m->clear();
+	m->createEntityPool("TEST", 2);
+	auto e = m->createEntity("TEST");
+
+	auto eCheck = m->getEntityById(e->getId());
+	ASSERT_EQ(e, eCheck);
+}
+
+TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)
+{
+	m->clear();
+
+	auto e = m->createEntity();
+	e->addComponent<TestC2>();
+
+	e->kill();
+
+	ASSERT_EQ(m->getComponentCount<TestC2>(), 0);
+}
+
+TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY_ON_NONE_DEFAULT_ENTITY_POOL)
+{
+	m->clear();
+
+	m->createEntityPool("TEST", 2);
+
+	auto e = m->createEntity("TEST");
+	e->addComponent<TestC2>();
+
+	e->kill();
+
+	ASSERT_EQ(e->getId(), ECS::INVALID_E_ID);
+	ASSERT_EQ(e->isAlive(), false);
 }
 
 TEST(FUNCTION_TEST, ADD_COMPONENT)
@@ -457,4 +534,144 @@ TEST(FUNCTION_TEST, SIGNATURE)
 
 	ASSERT_TRUE(e->getSignature()[tc1->getUniqueId()] == true);
 }
-*/
+
+TEST(FUNCTION_TEST, SYSTEM_DUPLICATION)
+{
+	m->clear();
+
+	auto system = m->createSystem<TestSystem1>();
+	auto badSystem = m->createSystem<TestSystem1>();
+	ASSERT_EQ(badSystem, nullptr);
+}
+
+TEST(FUNCTION_TEST, HAS_SYSTEM)
+{
+	m->clear();
+
+	ASSERT_FALSE(m->hasSystem<TestSystem1>());
+
+	auto system = m->createSystem<TestSystem1>();
+
+	ASSERT_TRUE(m->hasSystem<TestSystem1>());
+	ASSERT_FALSE(m->hasSystem<TestSystem2>());
+	ASSERT_TRUE(m->hasSystem<TestSystem1>(system));
+
+	m->deleteSystem<TestSystem1>(system);
+
+	ASSERT_FALSE(m->hasSystem<TestSystem1>());
+	ASSERT_FALSE(m->hasSystem<TestSystem1>(system));
+}
+
+TEST(FUNCTION_TEST, GET_SYSTEM)
+{
+	m->clear();
+
+	auto s1 = m->createSystem<TestSystem1>();
+	auto s2 = m->createSystem<TestSystem2>();
+
+	auto check = m->getSystem<TestSystem1>();
+	ASSERT_EQ(s1->getId(), check->getId());
+	ASSERT_NE(s2->getId(), check->getId());
+}
+
+TEST(FUNCTION_TEST, SYSTEM_COMPONENT_TYPE)
+{
+	m->clear();
+
+	auto s = m->createSystem<TestSystem1>();
+	
+	ECS::Signature signature = s->getSignature();
+	ASSERT_EQ(signature.to_ulong(), 0);
+
+	bool success = s->addComponentType<TestC1>();
+	ASSERT_FALSE(success);
+	signature = s->getSignature();
+	ASSERT_EQ(signature.to_ulong(), 0);
+
+	auto e = m->createEntity();
+	e->addComponent<TestC1>();
+	e->addComponent<TestC2>();
+	
+	success = s->addComponentType<TestC1>();
+	ASSERT_TRUE(success);
+	success = s->addComponentType<TestC1>();
+	ASSERT_TRUE(success);
+	signature = s->getSignature();
+	ASSERT_EQ(signature.to_ulong(), 1);
+	success = s->addComponentType<TestC2>();
+	ASSERT_TRUE(success);
+	signature = s->getSignature();
+	ASSERT_EQ(signature.to_ulong(), 3);
+
+	success = s->removeComponentType<TestC1>();
+	ASSERT_TRUE(success);
+	signature = s->getSignature();
+	ASSERT_EQ(signature.to_ulong(), 2);
+	success = s->removeComponentType<TestC1>();
+	ASSERT_TRUE(success);
+}
+
+TEST(FUNCTION_TEST, SYSTEM_PRIORITY)
+{
+	m->clear();
+
+	auto s1 = m->createSystem<TestSystem1>();	// priority = 0
+	auto s2 = m->createSystem<TestSystem2>();	// priority = 1
+
+	ASSERT_EQ(s1->getPriority(), 0);
+	ASSERT_EQ(s2->getPriority(), 1);
+}
+
+TEST(FUNCTION_TEST, SYSTEM_SAME_PRIORITY)
+{
+	m->clear();
+	auto s1 = m->createSystem<TestSystem1>();	// priority = 0
+	auto s3 = m->createSystem<TestSystem3>();	// priority = 0
+
+	ASSERT_EQ(s1->getPriority(), 0);
+	ASSERT_EQ(s3, nullptr);
+}
+
+TEST(FUNCTION_TEST, SYSTEM_UPDATE_ORDER)
+{
+	m->clear();
+
+	auto s1 = m->createSystem<TestSystem1>();	// priority = 0
+	auto s2 = m->createSystem<TestSystem2>();	// priority = 1
+
+	auto updateOrder = m->getSystemUpdateOrder();
+
+	ASSERT_EQ(updateOrder.at(s1->getPriority()), s1->getId());
+	ASSERT_EQ(updateOrder.at(s2->getPriority()), s2->getId());
+}
+
+TEST(FUNCTION_TEST, MANGER_UPDATE)
+{
+	m->clear();
+
+	auto e1 = m->createEntity();
+	auto e2 = m->createEntity();
+
+	e1->addComponent<HealthComponent>();
+	e2->addComponent<HealthComponent>();
+	e2->addComponent<PositionComponent>();
+
+	auto s1 = m->createSystem<HealthSystem>();
+	auto s2 = m->createSystem<MovementSystem>();
+
+	s1->addComponentType<HealthComponent>();
+	s2->addComponentType<PositionComponent>();
+
+	m->update(0);
+
+	ASSERT_EQ(e1->getComponent<HealthComponent>()->health, 11);
+
+	ASSERT_EQ(e2->getComponent<HealthComponent>()->health, 11);
+	ASSERT_EQ(e2->getComponent<PositionComponent>()->x, 1);
+	ASSERT_EQ(e2->getComponent<PositionComponent>()->y, 0);
+}
+
+TEST(END, DELETE_MANAGER)
+{
+	ECS::Manager::deleteInstance();
+}
