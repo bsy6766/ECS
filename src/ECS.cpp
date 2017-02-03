@@ -62,7 +62,7 @@ void ECS::Manager::update(const float delta)
 	// Main update.
 
 	// Update system by priority.
-	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+	//std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 	for (auto& system : this->systems)
 	{
 		std::vector<ECS::Entity*> entities;
@@ -83,34 +83,8 @@ void ECS::Manager::update(const float delta)
 
 		system.second->update(delta, entities);
 	}
-	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-	std::cout << "Time taken = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << std::endl;
-}
-
-void ECS::Manager::sendError(const ERROR_CODE errorCode)
-{
-	if (this->errorCallback != nullptr)
-	{
-		std::string msg;
-		switch (errorCode)
-		{
-		case ECS::ERROR_CODE::ECS_INVALID_POOL_NAME:
-			msg = "ECS_ERROR: EntityPool name can't be empty or \"" + DEFAULT_ENTITY_POOL_NAME + "\".";
-			break;
-		case ECS::ERROR_CODE::ECS_DUPLICATED_POOL_NAME:
-			msg = "ECS_ERROR: There is a pool already with the same name.";
-			break;
-		case ECS::ERROR_CODE::ECS_POOL_NOT_FOUND:
-			msg = "ECS_ERROR: Failed to find pool.";
-			break;
-		case ECS::ERROR_CODE::ECS_NO_ERROR:
-		default:
-			return;
-			break;
-		}
-
-		this->errorCallback(errorCode, msg);
-	}
+	//std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+	//std::cout << "Time taken = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << std::endl;
 }
 
 void ECS::Manager::wrapIdCounter(const C_UNIQUE_ID cUniqueId)
@@ -193,14 +167,12 @@ const bool ECS::Manager::createEntityPool(const std::string& name, const int max
 	if (name.empty() || name == DEFAULT_ENTITY_POOL_NAME)
 	{
 		// Pool name can't be empty or default
-		this->sendError(ERROR_CODE::ECS_INVALID_POOL_NAME);
 		return false;
 	}
 
 	if (this->hasEntityPoolName(name))
 	{
 		// There is a pool with same name
-		this->sendError(ERROR_CODE::ECS_DUPLICATED_POOL_NAME);
 		return false;
 	}
 
@@ -231,7 +203,6 @@ const bool ECS::Manager::deleteEntityPool(const std::string& name)
 	if (name.empty() || name == DEFAULT_ENTITY_POOL_NAME)
 	{
 		// Can't delete with empty pool name or default name
-		this->sendError(ERROR_CODE::ECS_DUPLICATED_POOL_NAME);
 		return false;
 	}
 
@@ -253,7 +224,6 @@ ECS::Entity* ECS::Manager::createEntity(const std::string& poolName)
 	if (poolName.empty())
 	{
 		// Pool name can't be empty
-		this->sendError(ERROR_CODE::ECS_INVALID_POOL_NAME);
 		return nullptr;
 	}
 
@@ -261,14 +231,12 @@ ECS::Entity* ECS::Manager::createEntity(const std::string& poolName)
 
 	if (find_it == this->entityPools.end())
 	{
-		this->sendError(ERROR_CODE::ECS_POOL_NOT_FOUND);
 		return nullptr;
 	}
 
 	if (find_it->second->nextIndicies.empty())
 	{
 		// queue is empty. Pool is full
-		this->sendError(ERROR_CODE::ECS_POOL_IS_FULL);
 		return nullptr;
 	}
 	else
@@ -282,7 +250,6 @@ ECS::Entity* ECS::Manager::createEntity(const std::string& poolName)
 	}
 
 	// failed to find pool
-	this->sendError(ERROR_CODE::ECS_POOL_NOT_FOUND);
 	return nullptr;
 }
 
@@ -290,7 +257,6 @@ ECS::Entity* ECS::Manager::getEntityById(const E_ID entityId)
 {
 	if (entityId == ECS::INVALID_E_ID)
 	{
-		this->sendError(ERROR_CODE::ECS_INVALID_ENTITY_ID);
 		return nullptr;
 	}
 
@@ -307,7 +273,6 @@ ECS::Entity* ECS::Manager::getEntityById(const E_ID entityId)
 	}
 
 	// Entity not found
-	this->sendError(ERROR_CODE::ECS_ENTITY_NOT_FOUND);
 	return nullptr;
 }
 

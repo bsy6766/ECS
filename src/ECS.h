@@ -72,19 +72,6 @@ namespace ECS
 	typedef unsigned int S_ID;							// System id
 	typedef std::bitset<MAX_C_UNIQUE_ID> Signature;
 
-	// Error code
-	enum class ERROR_CODE
-	{
-		ECS_NO_ERROR,
-		ECS_INVALID_POOL_NAME,
-		ECS_DUPLICATED_POOL_NAME,
-		ECS_POOL_NOT_FOUND,
-		ECS_POOL_IS_FULL,
-		ECS_INVALID_ENTITY_ID,
-		ECS_ENTITY_NOT_FOUND,
-	};
-
-
 	// Custom deleter for unique_ptr.
 	// By making this, user can't call destructor(delete) on any instances.
 	template<class T> class Deleter
@@ -342,9 +329,6 @@ namespace ECS
 		const S_ID registerSystem(const std::type_info& t);
 		const bool deleteSystem(System*& s, const std::type_info& t);
 		// ================================================================================
-
-		// Send error
-        void sendError(const ERROR_CODE errorCode);
 	public:
 		// Get instance.
 		static Manager* getInstance();
@@ -569,9 +553,6 @@ namespace ECS
 
 		// Print component information. For debug
 		void printComponentsInfo();
-
-		// Error callback. 
-		std::function<void(const ERROR_CODE, const std::string&)> errorCallback;
 	};
     
     /**
