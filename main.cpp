@@ -1,14 +1,6 @@
 #include <gtest\gtest.h>
 #include "src\ECS.h"
 
-int main(int argc, char** argv)
-{
-	testing::InitGoogleTest(&argc, argv);
-	RUN_ALL_TESTS();
-	system("pause");
-	return 0;
-}
-
 class TestC1 : public ECS::Component
 {
 public:
@@ -37,8 +29,30 @@ TestC2::TestC2() : ECS::Component(), data(0) {}
 
 TestC2::~TestC2() {}
 
+class TestSystem1 : public ECS::System
+{
+public:
+	TestSystem1();
+	~TestSystem1() = default;
+
+	void update(const float delta, std::vector<ECS::Entity*>& entities) override {};
+};
+
+TestSystem1::TestSystem1() : System() {}
+
 ECS::Manager* m = nullptr;
 
+int main(int argc, char** argv)
+{
+	testing::InitGoogleTest(&argc, argv);
+	RUN_ALL_TESTS();
+
+	ECS::Manager::deleteInstance();
+
+	system("pause");
+	return 0;
+}
+/*
 TEST(CREATION_TEST, MANAGER)
 {
 	m = ECS::Manager::getInstance();
@@ -130,6 +144,14 @@ TEST(CREATION_TEST, MULTIPLE_COMPONENTS)
 	m->clear();
 }
 
+TEST(CREATION_TEST, SYSTEM)
+{
+	m->clear();
+	TestSystem1* ts1 = m->createSystem<TestSystem1>();
+	ASSERT_NE(ts1, nullptr);
+	ASSERT_EQ(ts1->getId(), 0);
+}
+
 
 
 TEST(DELETION_TEST, MANAGER)
@@ -169,6 +191,16 @@ TEST(DELETION_TEST, COMPONENT)
 	ASSERT_EQ(newComp->getUniqueId(), 0);
 	m->deleteComponent<TestC1>(newComp);
 	ASSERT_EQ(newComp, nullptr);
+}
+
+TEST(DELETION_TEST, SYSTEM)
+{
+	m->clear();
+	TestSystem1* ts1 = m->createSystem<TestSystem1>();
+
+	m->deleteSystem<TestSystem1>(ts1);
+	ASSERT_EQ(ts1, nullptr);
+
 }
 
 
@@ -425,3 +457,4 @@ TEST(FUNCTION_TEST, SIGNATURE)
 
 	ASSERT_TRUE(e->getSignature()[tc1->getUniqueId()] == true);
 }
+*/

@@ -14,7 +14,10 @@ ECS::Manager::Manager()
 ECS::Manager::~Manager()
 {
 	// Unique ptr will release all for us
-	this->clear();
+	this->entityPools.clear();
+	this->components.clear();
+	this->componentIdCounter.clear();
+	this->C_UNIQUE_IDMap.clear();
 }
 
 Manager* ECS::Manager::getInstance()
@@ -279,6 +282,20 @@ const C_ID ECS::Manager::getComponentUniqueId(const std::type_info& t)
 	}
 }
 
+const S_ID ECS::Manager::getSystemId(const std::type_info & t)
+{
+	const std::type_index typeIndex = std::type_index(t);
+	auto find_it = this->S_IDMap.find(typeIndex);
+	if (find_it != this->S_IDMap.end())
+	{
+		return find_it->second;
+	}
+	else
+	{
+		return INVALID_S_ID;
+	}
+}
+
 const C_UNIQUE_ID ECS::Manager::registerComponent(const std::type_info& t)
 {
 	C_UNIQUE_ID cUniqueID = this->getComponentUniqueId(t);
@@ -308,7 +325,6 @@ const C_UNIQUE_ID ECS::Manager::registerComponent(const std::type_info& t)
 
 const bool ECS::Manager::deleteComponent(Component*& c, const std::type_info& t)
 {
-
 	// Check component
 	if (c == nullptr)
 	{
@@ -319,6 +335,7 @@ const bool ECS::Manager::deleteComponent(Component*& c, const std::type_info& t)
 	{
 		// Unique id is invalid
 		delete c;
+		c = nullptr;
 		return true;
 	}
 	else
@@ -327,6 +344,7 @@ const bool ECS::Manager::deleteComponent(Component*& c, const std::type_info& t)
 		{
 			// Doesn't have owner
 			delete c;
+			c = nullptr;
 			return true;
 		}
 		else
@@ -337,6 +355,7 @@ const bool ECS::Manager::deleteComponent(Component*& c, const std::type_info& t)
 			{
 				// Owner doesn't exists
 				delete c;
+				c = nullptr;
 				return true;
 			}
 			else
@@ -361,6 +380,7 @@ const bool ECS::Manager::deleteComponent(Component*& c, const std::type_info& t)
 						// Make it null
 						component = nullptr;
 
+						c = nullptr;
 						return true;
 					}
 				}
@@ -392,7 +412,7 @@ const bool ECS::Manager::hasComponent(Entity* e, const std::type_info& t)
 	}
 	else
 	{
-		Signature& s = e->signature;
+		E_Signature& s = e->signature;
 
 		try
 		{
@@ -710,6 +730,45 @@ const bool ECS::Manager::removeComponents(Entity* e, const std::type_info& t)
 	return true;
 }
 
+const S_ID ECS::Manager::registerSystem(const std::type_info & t)
+{
+	S_ID systemId = this->getSystemId(t);
+	if (systemId == ECS::INVALID_S_ID)
+	{
+		systemId = System::idCounter++;
+		if (systemId == ECS::MAX_S_ID)
+		{
+			System::idCounter--;
+			return ECS::INVALID_S_ID;
+		}
+
+		this->S_IDMap.insert(std::pair<std::type_index, S_ID>(std::type_index(t), systemId));
+	}
+
+	return systemId;
+}
+
+const bool ECS::Manager::deleteSystem(System*& s, const std::type_info& t)
+{
+	if (s == nullptr)
+	{
+		return false;
+	}
+
+	if (s->id == ECS::INVALID_S_ID)
+	{
+		delete s;
+		s = nullptr;
+		return true;
+	}
+	else
+	{
+		
+	}
+
+	return false;
+}
+
 void ECS::Manager::clear()
 {
 	ECS::EntityPool* defaultPool = this->entityPools[ECS::DEFAULT_ENTITY_POOL_NAME].release();
@@ -728,13 +787,14 @@ void ECS::Manager::clear()
 		defaultPool->nextIndicies.push_back(i);
 	}
 
-	this->entityPools.insert(std::pair<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<ECS::EntityPool>>>(ECS::DEFAULT_ENTITY_POOL_NAME, defaultPool));
-
-	//this->entityPools.insert(std::pair<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<ECS::EntityPool>>>(ECS::DEFAULT_ENTITY_POOL_NAME, std::unique_ptr<ECS::EntityPool, ECS::Deleter<ECS::EntityPool>>(new ECS::EntityPool(ECS::DEFAULT_ENTITY_POOL_NAME, ECS::DEFAULT_ENTITY_POOL_SIZE), ECS::Deleter<ECS::EntityPool>())));
+	this->entityPools.insert(std::pair<std::string, std::unique_ptr<ECS::EntityPool, ECS::Deleter<ECS::EntityPool>>>(ECS::DEFAULT_ENTITY_POOL_NAME, std::unique_ptr<ECS::EntityPool, ECS::Deleter<ECS::EntityPool>>(defaultPool, ECS::Deleter<ECS::EntityPool>())));
 
 	this->components.clear();
 	this->componentIdCounter.clear();
 	this->C_UNIQUE_IDMap.clear();
+
+	//this->systems.clear();
+	this->S_IDMap.clear();
 
 	Component::uniqueIdCounter = 0;
 	Entity::idCounter = 0;
@@ -982,8 +1042,9 @@ void ECS::Entity::getComponentIndiicesByUniqueId(const C_UNIQUE_ID cUniqueId, st
 			cIndicies.insert(index);
 		}
 	}
-	catch (...)
+	catch (const std::out_of_range& oor)
 	{
+		// Doesn't exist. return.
 		return;
 	}
 }
@@ -1028,7 +1089,7 @@ const bool ECS::Entity::isAlive()
 	return this->alive;
 }
 
-const Signature ECS::Entity::getSignature()
+const E_Signature ECS::Entity::getSignature()
 {
 	return this->signature;
 }
@@ -1066,3 +1127,82 @@ const E_ID ECS::Component::getOwnerId()
 {
 	return this->ownerId;
 }
+
+//============================================================================================
+
+S_ID ECS::System::idCounter = 0;
+
+ECS::System::System()
+: id(ECS::INVALID_S_ID)
+, signature(0)
+, entityPoolNames(std::list<std::string>())
+{}
+
+System::System(std::initializer_list<C_UNIQUE_ID> componentUniqueIds, std::initializer_list<std::string> entityPoolNames)
+: id(ECS::INVALID_S_ID)
+, signature(0)
+, entityPoolNames(entityPoolNames)
+{
+	for (auto cId : componentUniqueIds)
+	{
+		try
+		{
+			signature.test(cId);
+			signature[cId] = 1;
+		}
+		catch (const std::out_of_range& oor)
+		{
+			continue;
+		}
+	}
+}
+
+const S_ID ECS::System::getId()
+{
+	return this->id;
+}
+
+const S_Signature ECS::System::getSignature()
+{
+	return this->signature;
+}
+
+void ECS::System::disbaleDefafultEntityPool()
+{
+	this->queriesDefaultPool = false;
+}
+
+void ECS::System::enableDefaultEntityPool()
+{
+	this->queriesDefaultPool = true;
+}
+
+const bool ECS::System::addEntityPoolName(const std::string& entityPoolName)
+{
+	auto find_it = std::find(this->entityPoolNames.begin(), this->entityPoolNames.end(), entityPoolName);
+	if (find_it == this->entityPoolNames.end())
+	{
+		this->entityPoolNames.push_back(entityPoolName);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+const bool ECS::System::removeEntityPoolName(const std::string & entityPoolName)
+{
+	auto it = this->entityPoolNames.begin();
+	for (; it != this->entityPoolNames.end();)
+	{
+		if ((*it) == entityPoolName)
+		{
+			this->entityPoolNames.erase(it);
+			return true;
+		}
+	}
+
+	return false;
+}
+
