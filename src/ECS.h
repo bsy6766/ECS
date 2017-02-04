@@ -106,7 +106,6 @@ namespace ECS
 					(a.index == b.index) &&
 					(a.ownerId == b.ownerId));
 		}		
-		
 		friend bool operator!=(const Component& a, const Component& b)
 		{
 			return ((a.id != b.id) ||
@@ -126,7 +125,6 @@ namespace ECS
 			else
 				throw std::bad_alloc();
 		}
-
 		void operator delete(void* ptr) throw()
 		{
 			std::free(ptr);
@@ -134,19 +132,14 @@ namespace ECS
 	private:
 		// Component Id
 		C_ID id;
-
 		// Index 
 		C_INDEX index;
-
 		// counter
 		static C_UNIQUE_ID uniqueIdCounter;
-
 		// ID counter. Starts from 0
 		static void wrapUniqueIdCounter();
-
 		// Unique id number of this component type
 		C_UNIQUE_ID uniqueId;
-
 		// Owner of this component
 		E_ID ownerId;
 	public:
@@ -154,17 +147,15 @@ namespace ECS
 		virtual ~Component() = default;
 
 		// Disable all other constructors.
-		Component(const Component& arg) = delete;								// Copy constructor
-		Component(const Component&& arg) = delete;								// Move constructor
-		Component& operator=(const Component& arg) = delete;					// Assignment operator
-		Component& operator=(const Component&& arg) = delete;					// Move operator
+		Component(const Component& arg) = delete;					// Copy constructor
+		Component(const Component&& arg) = delete;					// Move constructor
+		Component& operator=(const Component& arg) = delete;		// Assignment operator
+		Component& operator=(const Component&& arg) = delete;		// Move operator
 
 		// Get component Id
 		const C_ID getId();
-
 		// Get unique id
 		const C_UNIQUE_ID getUniqueId();
-
 		// Get owner entity id of this component
 		const E_ID getOwnerId();
 	};
@@ -195,7 +186,6 @@ namespace ECS
 			else
 				throw std::bad_alloc();
 		}
-
 		void operator delete(void* ptr) throw()
 		{
 			std::free(ptr);
@@ -207,13 +197,12 @@ namespace ECS
 		bool queriesDefaultPool;
 		std::list<std::string> entityPoolNames;
 		int priority;
+		bool active;
 	public:
 		virtual ~System() = default;
 
 		const S_ID getId();
-
 		const Signature getSignature();
-
 		const int getPriority();
 
 		void disbaleDefafultEntityPool();
@@ -222,8 +211,7 @@ namespace ECS
 		const bool addEntityPoolName(const std::string& entityPoolName);
 		const bool removeEntityPoolName(const std::string& entityPoolName);
 
-		template<class T>
-		const bool addComponentType()
+		template<class T> const bool addComponentType()
 		{
 			auto m = ECS::Manager::getInstance();
 			auto cUniqueId = m->getComponentUniqueId(typeid(T));
@@ -238,9 +226,7 @@ namespace ECS
 				return false;
 			}
 		}
-
-		template<class T>
-		const bool removeComponentType()
+		template<class T> const bool removeComponentType()
 		{
 			auto m = ECS::Manager::getInstance();
 			auto cUniqueId = m->getComponentUniqueId(typeid(T));
@@ -255,6 +241,10 @@ namespace ECS
 				return false;
 			}
 		}
+
+		void deactivate();
+		void activate();
+		const bool isActive();
 
 		virtual void update(const float delta, std::vector<ECS::Entity*>& entities) = 0;
 	};
@@ -360,6 +350,8 @@ namespace ECS
 		const bool killEntity(ECS::Entity* e);
 		// Get entity by id. Returns nullptr if anything is invalid
         Entity* getEntityById(const E_ID entityId);
+		// Get all entity in pool
+		void getAllEnttitiesInPool(std::vector<ECS::Entity*>& entities, const std::string& poolName = ECS::DEFAULT_ENTITY_POOL_NAME);
 
 		// Create component.
 		template<class T> T* createComponent()

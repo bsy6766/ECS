@@ -388,6 +388,26 @@ TEST(FUNCTION_TEST, MANAGER_GET_ENTITY_BY_ID_NONE_DEFAULT_ENTITY_POOL)
 	ASSERT_EQ(e, eCheck);
 }
 
+TEST(FUNCTION_TEST, MANAGER_GET_ALL_ENTITIES_IN_POOL)
+{
+	m->clear();
+
+	for (int i = 0; i < 20; i++)
+	{
+		m->createEntity();
+	}
+
+	std::vector<ECS::Entity*> entities;
+	m->getAllEnttitiesInPool(entities);
+
+	ASSERT_EQ(entities.size(), 20);
+
+	for (int i = 0; i < 20; i++)
+	{
+		ASSERT_EQ(entities.at(i)->getId(), i);
+	}
+}
+
 TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)
 {
 	m->clear();
@@ -643,6 +663,35 @@ TEST(FUNCTION_TEST, SYSTEM_UPDATE_ORDER)
 
 	ASSERT_EQ(updateOrder.at(s1->getPriority()), s1->getId());
 	ASSERT_EQ(updateOrder.at(s2->getPriority()), s2->getId());
+}
+
+TEST(FUNCTION_TEST, SYSTEM_ACTIVE_STATE)
+{
+	m->clear();
+
+	auto e1 = m->createEntity();
+	e1->addComponent<HealthComponent>();
+
+	auto s1 = m->createSystem<HealthSystem>();
+	s1->addComponentType<HealthComponent>();
+
+	m->update(0);
+
+	ASSERT_EQ(e1->getComponent<HealthComponent>()->health, 11);
+
+	s1->deactivate();
+	ASSERT_EQ(s1->isActive(), false);
+
+	m->update(0);
+
+	ASSERT_EQ(e1->getComponent<HealthComponent>()->health, 11);
+
+	s1->activate();
+	ASSERT_EQ(s1->isActive(), true);
+
+	m->update(0);
+
+	ASSERT_EQ(e1->getComponent<HealthComponent>()->health, 12);
 }
 
 TEST(FUNCTION_TEST, MANGER_UPDATE)

@@ -63,26 +63,41 @@ void ECS::Manager::update(const float delta)
 
 	// Update system by priority.
 	//std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
 	for (auto& system : this->systems)
 	{
-		std::vector<ECS::Entity*> entities;
-		for (auto poolName : system.second->entityPoolNames)
+		if (system.second->active)
 		{
-			if (this->hasEntityPoolName(poolName))
+			std::vector<ECS::Entity*> entities;
+			for (auto poolName : system.second->entityPoolNames)
 			{
-				for (auto& entity : this->entityPools[poolName]->pool)
+				if (this->hasEntityPoolName(poolName))
 				{
-					const Signature cmpSig = entity->signature & system.second->signature;
-					if(cmpSig == system.second->signature)
+					if (poolName == ECS::DEFAULT_ENTITY_POOL_NAME)
 					{
-						entities.push_back(entity.get());
+						if (system.second->queriesDefaultPool == false)
+						{
+							continue;
+						}
+					}
+					for (auto& entity : this->entityPools[poolName]->pool)
+					{
+						if (entity->alive)
+						{
+							const Signature cmpSig = entity->signature & system.second->signature;
+							if (cmpSig == system.second->signature)
+							{
+								entities.push_back(entity.get());
+							}
+						}
 					}
 				}
 			}
-		}
 
-		system.second->update(delta, entities);
+			system.second->update(delta, entities);
+		}
 	}
+
 	//std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 	//std::cout << "Time taken = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << std::endl;
 }
@@ -274,6 +289,20 @@ ECS::Entity* ECS::Manager::getEntityById(const E_ID entityId)
 
 	// Entity not found
 	return nullptr;
+}
+
+void ECS::Manager::getAllEnttitiesInPool(std::vector<ECS::Entity*>& entities, const std::string & poolName)
+{
+	if (this->hasEntityPoolName(poolName))
+	{
+		for (auto& entity : this->entityPools[poolName]->pool)
+		{
+			if (entity->alive)
+			{
+				entities.push_back(entity.get());
+			}
+		}
+	}
 }
 
 const bool ECS::Manager::killEntity(ECS::Entity* e)
@@ -1047,6 +1076,7 @@ ECS::System::System(const int priority)
 , signature(0)
 , entityPoolNames({ ECS::DEFAULT_ENTITY_POOL_NAME })
 , priority(priority)
+, active(true)
 {}
 
 System::System(const int priority, std::initializer_list<C_UNIQUE_ID> componentUniqueIds, std::initializer_list<std::string> entityPoolNames)
@@ -1054,6 +1084,7 @@ System::System(const int priority, std::initializer_list<C_UNIQUE_ID> componentU
 , signature(0)
 , entityPoolNames(entityPoolNames)
 , priority(priority)
+, active(true)
 {
 	for (auto cId : componentUniqueIds)
 	{
@@ -1133,3 +1164,17 @@ const bool ECS::System::removeEntityPoolName(const std::string & entityPoolName)
 	return false;
 }
 
+void ECS::System::deactivate()
+{
+	this->active = false;
+}
+
+void ECS::System::activate()
+{
+	this->active = true;
+}
+
+const bool ECS::System::isActive()
+{
+	return this->active;
+}
