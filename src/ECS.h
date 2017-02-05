@@ -377,6 +377,8 @@ namespace ECS
 				}
 			}
 		}
+		// Move entity to Entity pool
+		const bool moveEntityToEntityPool(ECS::Entity*& entity, const std::string& entityPoolName);
 
 		// Create component.
 		template<class T> T* createComponent()

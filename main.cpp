@@ -432,6 +432,20 @@ TEST(FUNCTION_TEST, MANAGER_GET_ALL_ENTITIES_FOR_SYSTEM)
 	ASSERT_EQ(entities.size(), 20);
 }
 
+TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_ENTITY_POOL)
+{
+	m->clear();
+
+	auto e1 = m->createEntity();
+
+	m->createEntityPool("TEST", 2);
+
+	bool success = m->moveEntityToEntityPool(e1, "TEST");
+	ASSERT_TRUE(success);
+	ASSERT_NE(e1, nullptr);
+	ASSERT_EQ(e1->getEntityPoolName(), "TEST");
+}
+
 TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)
 {
 	m->clear();

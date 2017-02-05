@@ -300,6 +300,36 @@ void ECS::Manager::getAllEntitiesInPool(std::vector<ECS::Entity*>& entities, con
 	}
 }
 
+const bool ECS::Manager::moveEntityToEntityPool(ECS::Entity*& entity, const std::string& entityPoolName)
+{
+	if (entity == nullptr) return false;
+	if (entity->id == ECS::INVALID_E_ID) return false;
+
+	if (this->hasEntityPoolName(entityPoolName) && this->hasEntityPoolName(entity->entityPoolName))
+	{
+		ECS::Entity* target = this->createEntity(entityPoolName);
+		for (auto& e : this->entityPools[entity->entityPoolName]->pool)
+		{
+			if (e->id == entity->id)
+			{
+				target->signature = e->signature;
+				target->componentIndicies = e->componentIndicies;
+				target->sleep = e->sleep;
+
+				e->kill();
+
+				entity = nullptr;
+
+				entity = target;
+
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 const bool ECS::Manager::killEntity(ECS::Entity* e)
 {
 	if (e == nullptr) return false;
