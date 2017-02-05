@@ -584,12 +584,22 @@ TEST(FUNCTION_TEST, GET_COMPONENT)
         e->addComponent<TestC1>();
     }
     
+    // Can't really test what we got for 'first' component among the same types.
     TestC1* firstTC1Comp = e->getComponent<TestC1>();
     
     std::vector<TestC1*> components = e->getComponents<TestC1>();
     
-    ASSERT_EQ(components.front()->getId(), firstTC1Comp->getId());
-    ASSERT_EQ(components.front()->getUniqueId(), firstTC1Comp->getUniqueId());
+    bool found = false;
+    for(int i = 0; i<6; i++)
+    {
+        if(components.at(i)->getId() == firstTC1Comp->getId())
+        {
+            found = true;
+        }
+    }
+    ASSERT_TRUE(found);
+    
+    ASSERT_EQ(components.size(), 6);
     
     for (auto component : components)
     {
