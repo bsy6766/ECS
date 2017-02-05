@@ -286,7 +286,7 @@ ECS::Entity* ECS::Manager::getEntityById(const E_ID entityId)
 	return nullptr;
 }
 
-void ECS::Manager::getAllEnttitiesInPool(std::vector<ECS::Entity*>& entities, const std::string & poolName)
+void ECS::Manager::getAllEntitiesInPool(std::vector<ECS::Entity*>& entities, const std::string & poolName)
 {
 	if (this->hasEntityPoolName(poolName))
 	{
@@ -899,6 +899,7 @@ void ECS::Manager::clear()
 		defaultPool->pool.at(i)->componentIndicies.clear();
 		defaultPool->pool.at(i)->signature = 0;
 		defaultPool->pool.at(i)->index = i;
+		defaultPool->pool.at(i)->alive = false;
 		defaultPool->nextIndicies.push_back(i);
 	}
 

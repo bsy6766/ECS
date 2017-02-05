@@ -398,7 +398,7 @@ TEST(FUNCTION_TEST, MANAGER_GET_ALL_ENTITIES_IN_POOL)
 	}
 
 	std::vector<ECS::Entity*> entities;
-	m->getAllEnttitiesInPool(entities);
+	m->getAllEntitiesInPool(entities);
 
 	ASSERT_EQ(entities.size(), 20);
 
@@ -406,6 +406,30 @@ TEST(FUNCTION_TEST, MANAGER_GET_ALL_ENTITIES_IN_POOL)
 	{
 		ASSERT_EQ(entities.at(i)->getId(), i);
 	}
+}
+
+TEST(FUNCTION_TEST, MANAGER_GET_ALL_ENTITIES_FOR_SYSTEM)
+{
+	m->clear();
+
+	m->createEntityPool("FIRST", 16);
+	m->createEntityPool("SECOND", 16);
+
+	for (int i = 0; i < 10; i++)
+	{
+		m->createEntity("FIRST");
+		m->createEntity("SECOND");
+	}
+
+	auto s = m->createSystem<TestSystem1>();
+	s->disbaleDefafultEntityPool();
+	s->addEntityPoolName("FIRST");
+	s->addEntityPoolName("SECOND");
+
+	std::vector<ECS::Entity*> entities;
+	m->getAllEntitiesForSystem<TestSystem1>(entities);
+
+	ASSERT_EQ(entities.size(), 20);
 }
 
 TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)

@@ -352,7 +352,31 @@ namespace ECS
 		// Get entity by id. Returns nullptr if anything is invalid
         Entity* getEntityById(const E_ID entityId);
 		// Get all entity in pool
-		void getAllEnttitiesInPool(std::vector<ECS::Entity*>& entities, const std::string& poolName = ECS::DEFAULT_ENTITY_POOL_NAME);
+		void getAllEntitiesInPool(std::vector<ECS::Entity*>& entities, const std::string& poolName = ECS::DEFAULT_ENTITY_POOL_NAME);
+		// Get all entities that system updates
+		template<class T>void getAllEntitiesForSystem(std::vector<ECS::Entity*>& entities)
+		{
+			unsigned int totalSize = 0;
+			auto system = this->getSystem<T>();
+			if (system != nullptr)
+			{
+				for (auto poolName : system->entityPoolNames)
+				{
+					unsigned int size = this->getAliveEntityCountInEntityPool(poolName);
+					totalSize += size;
+				}
+
+				entities.clear();
+				entities.reserve(totalSize);
+
+				for (auto poolName : system->entityPoolNames)
+				{
+					std::vector<ECS::Entity*> eVec;
+					this->getAllEntitiesInPool(eVec, poolName);
+					entities.insert(entities.end(), eVec.begin(), eVec.end());
+				}
+			}
+		}
 
 		// Create component.
 		template<class T> T* createComponent()
