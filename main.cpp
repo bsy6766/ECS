@@ -337,7 +337,7 @@ TEST(FUNCTION_TEST, MANAGER_CREATE_ENTITY)
 	bool success = m->createEntityPool("NEW", 4);
 
 	ECS::Entity* e2 = m->createEntity("NEW");
-	ASSERT_EQ(e2->getId(), 1);
+	ASSERT_EQ(e2->getId(), 0);
 	ASSERT_EQ(e2->hasComponent<TestC1>(), false);
 	ASSERT_EQ(e2->getEntityPoolName(), "NEW");
 
@@ -437,13 +437,17 @@ TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_ENTITY_POOL)
 	m->clear();
 
 	auto e1 = m->createEntity();
+	e1->addComponent<TestC1>();
 
 	m->createEntityPool("TEST", 2);
 
 	bool success = m->moveEntityToEntityPool(e1, "TEST");
 	ASSERT_TRUE(success);
 	ASSERT_NE(e1, nullptr);
+	ASSERT_EQ(e1->getId(), 0);
 	ASSERT_EQ(e1->getEntityPoolName(), "TEST");
+	auto c1 = e1->getComponent<TestC1>();
+	ASSERT_NE(c1, nullptr);
 }
 
 TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_FULL_ENTITY_POOL)
@@ -453,8 +457,8 @@ TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_FULL_ENTITY_POOL)
 	auto e1 = m->createEntity();
 
 	m->createEntityPool("TEST", 2);
-	m->createEntity("TEST");
-	m->createEntity("TEST");
+	auto e2 = m->createEntity("TEST");
+	auto e3 = m->createEntity("TEST");
 
 	bool success = m->moveEntityToEntityPool(e1, "TEST");
 	ASSERT_FALSE(success);
