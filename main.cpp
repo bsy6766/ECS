@@ -466,6 +466,44 @@ TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_FULL_ENTITY_POOL)
 	ASSERT_EQ(e1->getEntityPoolName(), ECS::DEFAULT_ENTITY_POOL_NAME);
 }
 
+TEST(FUNCTION_TEST, MANAGER_RESIZE_ENTITY_POOL)
+{
+	m->clear();
+	m->createEntityPool("TEST", 2);
+
+	auto e1 = m->createEntity("TEST");
+	auto e2 = m->createEntity("TEST");
+	auto bad = m->createEntity("TEST");
+	ASSERT_EQ(bad, nullptr);
+
+	bool success = m->resizeEntityPool("TEST", 4);
+	ASSERT_TRUE(success);
+	ASSERT_EQ(m->getEntityPoolSize("TEST"), 4);
+
+	auto d1 = m->createEntity("TEST");
+	ASSERT_NE(d1, nullptr);
+	auto d2 = m->createEntity("TEST");
+	ASSERT_NE(d2, nullptr);
+
+	success = m->resizeEntityPool("TEST", 4);
+	std::vector<ECS::Entity*> entities;
+	m->getAllEntitiesInPool(entities, "TEST");
+	ASSERT_EQ(entities.size(), 4);
+	ASSERT_EQ(entities.at(0)->getId(), e1->getId());
+	ASSERT_EQ(entities.at(1)->getId(), e2->getId());
+	ASSERT_EQ(entities.at(2)->getId(), d1->getId());
+	ASSERT_EQ(entities.at(3)->getId(), d2->getId());
+
+	m->resizeEntityPool("TEST", 2);
+	entities.clear();
+	m->getAllEntitiesInPool(entities, "TEST");
+	ASSERT_EQ(entities.size(), 2);
+	ASSERT_EQ(entities.at(0)->getId(), e1->getId());
+	ASSERT_EQ(entities.at(1)->getId(), e2->getId());
+	ASSERT_NE(entities.at(0)->getId(), d1->getId());
+	ASSERT_NE(entities.at(1)->getId(), d2->getId());
+}
+
 TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)
 {
 	m->clear();
