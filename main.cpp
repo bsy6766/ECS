@@ -446,6 +446,22 @@ TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_ENTITY_POOL)
 	ASSERT_EQ(e1->getEntityPoolName(), "TEST");
 }
 
+TEST(FUNCTION_TEST, MANAGER_MOVE_ENTITY_TO_FULL_ENTITY_POOL)
+{
+	m->clear();
+
+	auto e1 = m->createEntity();
+
+	m->createEntityPool("TEST", 2);
+	m->createEntity("TEST");
+	m->createEntity("TEST");
+
+	bool success = m->moveEntityToEntityPool(e1, "TEST");
+	ASSERT_FALSE(success);
+
+	ASSERT_EQ(e1->getEntityPoolName(), ECS::DEFAULT_ENTITY_POOL_NAME);
+}
+
 TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)
 {
 	m->clear();

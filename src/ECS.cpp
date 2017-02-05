@@ -308,6 +308,11 @@ const bool ECS::Manager::moveEntityToEntityPool(ECS::Entity*& entity, const std:
 	if (this->hasEntityPoolName(entityPoolName) && this->hasEntityPoolName(entity->entityPoolName))
 	{
 		ECS::Entity* target = this->createEntity(entityPoolName);
+		if (target == nullptr)
+		{
+			return false;
+		}
+
 		for (auto& e : this->entityPools[entity->entityPoolName]->pool)
 		{
 			if (e->id == entity->id)
