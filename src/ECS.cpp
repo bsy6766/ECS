@@ -199,7 +199,7 @@ const bool ECS::Manager::createEntityPool(const std::string& name, const int max
 	for (unsigned int i = 0; i < poolSize; i++)
 	{
 		newPool->pool.push_back(std::unique_ptr<ECS::Entity, ECS::Deleter<ECS::Entity>>(new ECS::Entity(), ECS::Deleter<ECS::Entity>()));
-		newPool->nextIndicies.push_front(i);
+		newPool->nextIndicies.push_back(i);
 		newPool->pool.back()->entityPoolName = name;
 		newPool->pool.back()->index = i;
 	}
