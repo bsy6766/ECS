@@ -1,5 +1,6 @@
 #include "ECS.h"
 #include <cassert>
+#include <string>
 
 using namespace ECS;
 
@@ -24,6 +25,7 @@ ECS::Manager::~Manager()
 	// Unique ptr will release all for us
 	this->entityPools.clear();
 	this->components.clear();
+	this->systems.clear();
 	this->C_UNIQUE_IDMap.clear();
 }
 
@@ -62,8 +64,6 @@ void ECS::Manager::update(const float delta)
 	// Main update.
 
 	// Update system by priority.
-	//std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-
 	for (auto& system : this->systems)
 	{
 		if (system.second->active)
@@ -80,6 +80,7 @@ void ECS::Manager::update(const float delta)
 							continue;
 						}
 					}
+
 					for (auto& entity : this->entityPools[poolName]->pool)
 					{
 						if (entity->alive)
@@ -98,21 +99,15 @@ void ECS::Manager::update(const float delta)
 		}
 	}
 
-	//std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-	//std::cout << "Time taken = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << std::endl;
 }
 
 void ECS::Manager::wrapIdCounter(const C_UNIQUE_ID cUniqueId)
 {
 	try
 	{
-		auto find_it = this->components.find(cUniqueId);
-		if (find_it != this->components.end())
+		if (this->components.at(cUniqueId)->idCounter >= ECS::MAX_C_UNIQUE_ID)
 		{
-			if (find_it->second->idCounter >= ECS::MAX_C_UNIQUE_ID)
-			{
-				find_it->second->idCounter = 0;
-			}
+			this->components.at(cUniqueId)->idCounter = 0;
 		}
 	}
 	catch (...)
@@ -204,7 +199,7 @@ const bool ECS::Manager::createEntityPool(const std::string& name, const int max
 	for (unsigned int i = 0; i < poolSize; i++)
 	{
 		newPool->pool.push_back(std::unique_ptr<ECS::Entity, ECS::Deleter<ECS::Entity>>(new ECS::Entity(), ECS::Deleter<ECS::Entity>()));
-		newPool->nextIndicies.push_back(i);
+		newPool->nextIndicies.push_front(i);
 		newPool->pool.back()->entityPoolName = name;
 		newPool->pool.back()->index = i;
 	}
@@ -314,7 +309,6 @@ const bool ECS::Manager::killEntity(ECS::Entity* e)
 	if (this->hasEntityPoolName(e->entityPoolName))
 	{
 		assert(e->index != ECS::MAX_E_ID);
-		this->entityPools[e->entityPoolName]->nextIndicies.push_back(e->index);
 
 		// Wipe everything
 		for (auto componentIndicies : this->entityPools[e->entityPoolName]->pool.at(e->index)->componentIndicies)
@@ -328,7 +322,7 @@ const bool ECS::Manager::killEntity(ECS::Entity* e)
 					{
 						Component* c = this->components.at(cUnqiueId)->pool.at(cIndex).release();
 						this->components.at(cUnqiueId)->pool.at(cIndex) = nullptr;
-						this->components.at(cUnqiueId)->nextIndicies.push_back(cIndex);
+						this->components.at(cUnqiueId)->nextIndicies.push_front(cIndex);
 						delete c;
 						c = nullptr;
 					}
@@ -336,6 +330,7 @@ const bool ECS::Manager::killEntity(ECS::Entity* e)
 			}
 		}
 
+		this->entityPools[e->entityPoolName]->nextIndicies.push_front(e->index);
 		this->entityPools[e->entityPoolName]->pool.at(e->index)->componentIndicies.clear();
 		this->entityPools[e->entityPoolName]->pool.at(e->index)->id = ECS::INVALID_E_ID;
 		this->entityPools[e->entityPoolName]->pool.at(e->index)->alive = false;
@@ -353,14 +348,13 @@ const bool ECS::Manager::killEntity(ECS::Entity* e)
 const C_ID ECS::Manager::getComponentUniqueId(const std::type_info& t)
 {
 	const std::type_index typeIndex = std::type_index(t);
-	auto find_it = this->C_UNIQUE_IDMap.find(typeIndex);
-	if (find_it != this->C_UNIQUE_IDMap.end())
+	try
 	{
-		return find_it->second;
+		return this->C_UNIQUE_IDMap.at(typeIndex);
 	}
-	else
+	catch (const std::out_of_range& oor)
 	{
-		return INVALID_C_UNIQUE_ID;
+		return ECS::INVALID_C_UNIQUE_ID;
 	}
 }
 
@@ -400,7 +394,7 @@ const C_UNIQUE_ID ECS::Manager::registerComponent(const std::type_info& t)
 		newPool->idCounter = 0;
 		newPool->nextIndicies.clear();
 		newPool->pool.clear();
-		this->components.insert(std::pair<C_UNIQUE_ID, std::unique_ptr<ECS::Manager::ComponentPool>>(cUniqueID, std::unique_ptr<ECS::Manager::ComponentPool>(newPool)));
+		this->components.push_back(std::unique_ptr<ECS::Manager::ComponentPool>(std::unique_ptr<ECS::Manager::ComponentPool>(newPool)));
 	}
 
 	return cUniqueID;
@@ -556,9 +550,9 @@ Component* ECS::Manager::getComponent(Entity* e, const std::type_info& t)
 	else
 	{
 		// This type of component is already known. We have unique id and pool ready.
-		std::set<C_INDEX> cIndicies;
+		std::unordered_set<C_INDEX>& cIndicies = e->componentIndicies.at(cUniqueId);
 		// Get C_INDEXs
-		e->getComponentIndiicesByUniqueId(cUniqueId, cIndicies);
+		//e->getComponentIndiicesByUniqueId(cUniqueId, cIndicies);
 
 		if (cIndicies.empty())
 		{
@@ -589,7 +583,7 @@ std::vector<Component*> ECS::Manager::getComponents(Entity* e, const std::type_i
 	else
 	{
 		// This type of component is already known. We have unique id and pool ready.
-		std::set<C_INDEX> cIndicies;
+		std::unordered_set<C_INDEX> cIndicies;
 		// Get C_INDEXs
 		e->getComponentIndiicesByUniqueId(cUniqueId, cIndicies);
 
@@ -658,7 +652,7 @@ const bool ECS::Manager::addComponent(Entity* e, const std::type_info& t, Compon
 	auto find_it = e->componentIndicies.find(cUniqueId);
 	if (find_it == e->componentIndicies.end())
 	{
-		e->componentIndicies.insert(std::pair<C_UNIQUE_ID, std::set<C_INDEX>>(cUniqueId, std::set<C_INDEX>()));
+		e->componentIndicies.insert(std::pair<C_UNIQUE_ID, std::unordered_set<C_INDEX>>(cUniqueId, std::unordered_set<C_INDEX>()));
 	}
 	e->componentIndicies[cUniqueId].insert(cIndex);
 
@@ -708,7 +702,7 @@ const bool ECS::Manager::removeComponent(Entity* e, const std::type_info& t, con
 				// Owner match
 				Component* c = component.release();
 				component = nullptr;
-				this->components[cUniqueId]->nextIndicies.push_back(index);
+				this->components[cUniqueId]->nextIndicies.push_front(index);
 				delete c;
 				e->componentIndicies.at(cUniqueId).erase(index);
 
@@ -754,7 +748,7 @@ const bool ECS::Manager::removeComponent(Entity* e, const std::type_info& t, Com
 		auto comp = this->components[cUniqueId]->pool.at(c->index).release();
 		this->components[cUniqueId]->pool.at(c->index) = nullptr;
 		delete comp;
-		this->components[cUniqueId]->nextIndicies.push_back(c->index);
+		this->components[cUniqueId]->nextIndicies.push_front(c->index);
 		e->componentIndicies.at(cUniqueId).erase(c->index);
 
 		if (e->componentIndicies.at(cUniqueId).empty())
@@ -787,7 +781,7 @@ const bool ECS::Manager::removeComponents(Entity* e, const std::type_info& t)
 		return false;
 	}
 
-	std::set<C_INDEX> cIndicies;
+	std::unordered_set<C_INDEX> cIndicies;
 	e->getComponentIndiicesByUniqueId(cUniqueId, cIndicies);
 
 	if (cIndicies.empty())
@@ -983,14 +977,15 @@ void ECS::Entity::wrapIdCounter()
 	}
 }
 
-void ECS::Entity::getComponentIndiicesByUniqueId(const C_UNIQUE_ID cUniqueId, std::set<C_INDEX>& cIndicies)
+void ECS::Entity::getComponentIndiicesByUniqueId(const C_UNIQUE_ID cUniqueId, std::unordered_set<C_INDEX>& cIndicies)
 {
 	try
 	{
-		for (auto index : this->componentIndicies.at(cUniqueId))
-		{
-			cIndicies.insert(index);
-		}
+		//for (auto index : this->componentIndicies.at(cUniqueId))
+		//{
+		//	cIndicies.insert(index);
+		//}
+		cIndicies = this->componentIndicies.at(cUniqueId);
 	}
 	catch (const std::out_of_range& oor)
 	{
@@ -1077,6 +1072,7 @@ ECS::System::System(const int priority)
 , entityPoolNames({ ECS::DEFAULT_ENTITY_POOL_NAME })
 , priority(priority)
 , active(true)
+, queriesDefaultPool(true)
 {}
 
 System::System(const int priority, std::initializer_list<C_UNIQUE_ID> componentUniqueIds, std::initializer_list<std::string> entityPoolNames)
@@ -1085,6 +1081,7 @@ System::System(const int priority, std::initializer_list<C_UNIQUE_ID> componentU
 , entityPoolNames(entityPoolNames)
 , priority(priority)
 , active(true)
+, queriesDefaultPool(true)
 {
 	for (auto cId : componentUniqueIds)
 	{

@@ -6,7 +6,7 @@
 #include <list>
 #include <deque>
 #include <unordered_map>
-#include <set>	
+#include <unordered_set>	
 #include <map>	
 // Util
 #include <memory>				// unique_ptr
@@ -290,7 +290,8 @@ namespace ECS
 			unsigned int idCounter;
 		};
 		// Components
-		std::unordered_map<C_UNIQUE_ID, std::unique_ptr<ComponentPool>> components;
+		//std::unordered_map<C_UNIQUE_ID, std::unique_ptr<ComponentPool>> components;
+		std::vector<std::unique_ptr<ComponentPool>> components;
 		// Component ID Map. class type_index <---> CID
 		std::unordered_map<std::type_index, C_UNIQUE_ID> C_UNIQUE_IDMap;
 		// Wraps id counter if reaches max
@@ -393,7 +394,7 @@ namespace ECS
         // Get component of this type on entity. Will only return first one if there are more than one smae types of component
         template<class T> T* getComponent(Entity* e)
         {
-            return dynamic_cast<T*>(this->getComponent(e, typeid(T)));
+            return static_cast<T*>(this->getComponent(e, typeid(T)));
         }
         // Get all componets of this type on enttiy.
         template<class T> std::vector<T*> getComponents(Entity* e)
@@ -403,7 +404,7 @@ namespace ECS
             
 			for(auto c : component)
             {
-				ret.push_back(dynamic_cast<T*>(c));
+				ret.push_back(static_cast<T*>(c));
             }
             
             return ret;
@@ -525,17 +526,21 @@ namespace ECS
 		{
 			if (this->hasSystem<T>())
 			{
-				const S_ID sId = this->getSystemId(typeid(T));
-				for (auto& system : this->systems)
+				try
 				{
-					if (system.second->id == sId)
-					{
-						return dynamic_cast<T*>(system.second.get());
-					}
+					return static_cast<T*>(
+						this->systems.at(
+							this->getSystemId(typeid(T))).get());
+				}
+				catch (const std::out_of_range& oor)
+				{
+					return nullptr;
 				}
 			}
-
-			return nullptr;
+			else
+			{
+				return nullptr;
+			}
 		}
 		// Get system update order
 		std::map<int, S_ID> getSystemUpdateOrder();
@@ -575,7 +580,7 @@ namespace ECS
         Signature signature;
         
         // Component Index map
-        std::unordered_map<C_UNIQUE_ID, std::set<C_INDEX>> componentIndicies;
+        std::unordered_map<C_UNIQUE_ID, std::unordered_set<C_INDEX>> componentIndicies;
         
         // ID counter. Starts from 0
         static E_ID idCounter;
@@ -600,7 +605,7 @@ namespace ECS
         void revive();
         
         // get C_INDEX by C_UNIQUE_ID
-        void getComponentIndiicesByUniqueId(const C_UNIQUE_ID cId, std::set<C_INDEX>& cIndicies);
+        void getComponentIndiicesByUniqueId(const C_UNIQUE_ID cId, std::unordered_set<C_INDEX>& cIndicies);
 
     public:
         // Kill entity. Once this is called, this entity will not be functional anymore.
