@@ -252,6 +252,24 @@ TEST(DELETION_TEST, ENTITY)
     ASSERT_EQ(e->isAlive(), false);
 }
 
+TEST(DELETION_TEST, ENTITY_POOL)
+{
+    m->clear();
+    
+    m->createEntityPool("TEST", 32);
+    
+    bool fail = m->deleteEntityPool(ECS::DEFAULT_ENTITY_POOL_NAME);
+    ASSERT_FALSE(fail);
+    fail = m->deleteEntityPool("");
+    ASSERT_FALSE(fail);
+    fail = m->deleteEntityPool("NONE");
+    ASSERT_FALSE(fail);
+    bool success = m->deleteEntityPool("TEST");
+    ASSERT_TRUE(success);
+    ECS::Entity* e1 = m->createEntity("TEST");
+    ASSERT_EQ(e1, nullptr);
+}
+
 TEST(DELETION_TEST, COMPONENT)
 {
     m->clear();
