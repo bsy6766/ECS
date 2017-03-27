@@ -529,6 +529,30 @@ TEST(FUNCTION_TEST, MANAGER_RESIZE_ENTITY_POOL)
     ASSERT_NE(entities.at(1)->getId(), d2->getId());
 }
 
+TEST(FUNCTION_TEST, MANAGER_GET_ALL_ENTITY_POOL_NAMES)
+{
+	m->clear();
+	m->createEntityPool("first", 2);
+	m->createEntityPool("TwO", 2);
+	m->createEntityPool("3", 2);
+	m->createEntityPool("4th", 2);
+
+	auto entityPoolNames = m->getEntityPoolNames();
+	std::set<std::string> nameSet;
+	nameSet.insert(ECS::DEFAULT_ENTITY_POOL_NAME);
+	nameSet.insert("first");
+	nameSet.insert("TwO");
+	nameSet.insert("3");
+	nameSet.insert("4th");
+
+	auto end = nameSet.end();
+
+	for (auto entityPoolName : entityPoolNames)
+	{
+		ASSERT_NE(nameSet.find(entityPoolName), end);
+	}
+}
+
 TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY)
 {
     m->clear();

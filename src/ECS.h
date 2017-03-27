@@ -180,6 +180,8 @@ namespace ECS
         const bool resizeEntityPool(const std::string& entityPoolName, const unsigned int size);
         // Check if there is pool with same name
         const bool hasEntityPoolName(const std::string& name);
+		// Get all entity pool names
+		std::vector<std::string> getEntityPoolNames();
         // Get size of entity Pool
         const unsigned int getEntityPoolSize(const std::string& name = ECS::DEFAULT_ENTITY_POOL_NAME);
         // Get alive entity count of entity pool

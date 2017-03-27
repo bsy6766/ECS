@@ -135,6 +135,18 @@ const bool ECS::Manager::hasEntityPoolName(const std::string & name)
 	return this->entityPools.find(name) != this->entityPools.end();
 }
 
+std::vector<std::string> ECS::Manager::getEntityPoolNames()
+{
+	std::vector<std::string> names;
+
+	for (auto& ep : this->entityPools)
+	{
+		names.push_back(ep.first);
+	}
+
+	return names;
+}
+
 const unsigned int ECS::Manager::getEntityPoolSize(const std::string & name)
 {
 	auto find_it = this->entityPools.find(name);
