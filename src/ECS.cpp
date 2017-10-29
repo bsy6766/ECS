@@ -36,6 +36,10 @@ Manager* ECS::Manager::getInstance()
 	if (ECS::Manager::instance == nullptr)
 	{
 		ECS::Manager::instance = std::unique_ptr<Manager, ECS::Deleter<Manager>>(new Manager(), ECS::Deleter<Manager>());
+
+		ECS::Entity::manager = ECS::Manager::instance.get();
+		ECS::Component::manager = ECS::Manager::instance.get();
+		ECS::System::manager = ECS::Manager::instance.get();
 	}
 
 	return ECS::Manager::instance.get();
@@ -189,7 +193,7 @@ const bool ECS::Manager::isPowerOfTwo(const unsigned int n)
 
 void ECS::Manager::roundToNearestPowerOfTwo(unsigned int& n)
 {
-	n = pow(2, ceil(log(n) / log(2)));
+	n = static_cast<unsigned int>(pow(2, ceil(log(static_cast<double>(n)) / log(2))));
 }
 
 const bool ECS::Manager::createEntityPool(const std::string& name, const int maxSize)
@@ -426,6 +430,25 @@ const bool ECS::Manager::moveEntityToEntityPool(ECS::Entity*& entity, const std:
 	return false;
 }
 
+std::vector<Component*> ECS::Manager::getAllComponents(const C_UNIQUE_ID cUniqueID)
+{
+	std::vector<Component*> components;
+	
+	if (cUniqueID == INVALID_C_UNIQUE_ID)
+	{
+		return components;
+	}
+	else
+	{
+		for (auto& uPtr : this->components[cUniqueID]->pool)
+		{
+			components.push_back(uPtr.get());
+		}
+
+		return components;
+	}
+}
+
 const bool ECS::Manager::killEntity(ECS::Entity* e)
 {
 	if (e == nullptr) return false;
@@ -478,8 +501,9 @@ const C_ID ECS::Manager::getComponentUniqueId(const std::type_info& t)
 	{
 		return this->C_UNIQUE_IDMap.at(typeIndex);
 	}
-	catch (const std::out_of_range& oor)
+	catch (...)//(const std::out_of_range& oor)
 	{
+		//std::cout << oor.what() << std::endl;
 		return ECS::INVALID_C_UNIQUE_ID;
 	}
 }
@@ -1140,6 +1164,8 @@ void ECS::Manager::printComponentsInfo()
 
 //============================================================================================
 
+ECS::Manager* ECS::Entity::manager = nullptr;
+
 ECS::Entity::Entity()
 : alive(false)
 , sleep(false)
@@ -1159,9 +1185,10 @@ void ECS::Entity::getComponentIndiicesByUniqueId(const C_UNIQUE_ID cUniqueId, st
 		//}
 		cIndicies = this->componentIndicies.at(cUniqueId);
 	}
-	catch (const std::out_of_range& oor)
+	catch (...)// (const std::out_of_range& oor)
 	{
 		// Doesn't exist. return.
+		///std::cout << oor.what() << std::endl;
 		return;
 	}
 }
@@ -1202,6 +1229,7 @@ const Signature ECS::Entity::getSignature()
 //============================================================================================
 
 C_ID ECS::Component::uniqueIdCounter = 0;
+ECS::Manager* ECS::Component::manager = nullptr;
 
 Component::Component() 
 : id(INVALID_C_ID) 
@@ -1236,6 +1264,7 @@ const E_ID ECS::Component::getOwnerId()
 //============================================================================================
 
 S_ID ECS::System::idCounter = 0;
+ECS::Manager* ECS::System::manager = nullptr;
 
 ECS::System::System(const int priority)
 : id(ECS::INVALID_S_ID)
@@ -1261,8 +1290,9 @@ ECS::System::System(const int priority, std::initializer_list<C_UNIQUE_ID> compo
 			signature.test(cId);
 			signature[cId] = 1;
 		}
-		catch (const std::out_of_range& oor)
+		catch (...)// (const std::out_of_range& oor)
 		{
+			//std::cout << oor.what() << std::endl;
 			continue;
 		}
 	}

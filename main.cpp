@@ -5,7 +5,9 @@
 #include <gtest/gtest.h>
 #include "src/ECS.h"
 #endif
- 
+
+ECS::Manager* m = nullptr;
+
  class TestC1 : public ECS::Component
  {
  public:
@@ -29,7 +31,16 @@
  TestC2::TestC2() : ECS::Component(), data(0) {}
  
  TestC2::~TestC2() {}
- 
+
+ class TestC3 : public ECS::Component
+ {
+ public:
+	 TestC3();
+	 ~TestC3() = default;
+ };
+
+ TestC3::TestC3() : ECS::Component() {}
+  
  class TestSystem1 : public ECS::System
  {
  public:
@@ -62,6 +73,21 @@
  };
  
  TestSystem3::TestSystem3() : ECS::System(0) {}
+
+ class TestSystem4 : public ECS::System
+ {
+ public:
+	 TestSystem4();
+	 ~TestSystem4() = default;
+
+	 void update(const float delta, std::vector<ECS::Entity*>& entities) override;
+ };
+
+ TestSystem4::TestSystem4() : ECS::System(2)
+ {}
+
+ void TestSystem4::update(const float delta, std::vector<ECS::Entity*>& entities)
+ {}
  
  
  class HealthComponent : public ECS::Component
@@ -129,7 +155,6 @@
 	}
  }
  
- ECS::Manager* m = nullptr;
 
 int main(int argc, char** argv)
 {
@@ -580,7 +605,27 @@ TEST(FUNCTION_TEST, MANAGER_DELETE_ENTITY_ON_NONE_DEFAULT_ENTITY_POOL)
     ASSERT_EQ(e->isAlive(), false);
 }
 
-TEST(FUNCTION_TEST, ADD_COMPONENT)
+TEST(FUNCTION_TEST, MANAGER_HAS_COMPONENT_TYPE)
+{
+	m->clear();
+	ECS::Entity* e = m->createEntity();
+	bool success = e->addComponent<TestC1>();
+	ASSERT_TRUE(success);
+
+	success = m->hasComponentType<TestC1>();
+	ASSERT_TRUE(success);
+
+	success = e->addComponent<TestC2>();
+	ASSERT_TRUE(success);
+
+	success = m->hasComponentType<TestC2>();
+	ASSERT_TRUE(success);
+	
+	bool fail = m->hasComponentType<TestC3>();
+	ASSERT_FALSE(fail);
+}
+
+TEST(FUNCTION_TEST, ENTITY_ADD_COMPONENT)
 {
     m->clear();
     ECS::Entity* e = m->createEntity();
@@ -591,7 +636,7 @@ TEST(FUNCTION_TEST, ADD_COMPONENT)
     ASSERT_FALSE(fail);
 }
 
-TEST(FUNCTION_TEST, HAS_COMPONENT)
+TEST(FUNCTION_TEST, ENTITY_HAS_COMPONENT)
 {
     m->clear();
     
@@ -694,6 +739,47 @@ TEST(FUNCTION_TEST, REMOVE_COMPONENT)
     success = e->removeComponents<TestC1>();
     ASSERT_FALSE(success);
     
+}
+
+TEST(FUNCTION_TEST, MANAGER_GET_ALL_COMPONENTS)
+{
+	m->clear();
+
+	std::vector<ECS::Entity*> entities;
+	for (int i = 0; i < 5; i++)
+	{
+		entities.push_back(m->createEntity());
+		entities.back()->addComponent<TestC1>();
+		entities.back()->addComponent<TestC2>();
+	}
+
+	for (int i = 0; i < 5; i++)
+	{
+		TestC1* tc1 = entities.at(i)->getComponent<TestC1>();
+		ASSERT_NE(tc1, nullptr);
+		TestC2* tc2 = entities.at(i)->getComponent<TestC2>();
+		ASSERT_NE(tc2, nullptr);
+	}
+	
+	auto testC1Comps = m->getAllComponents<TestC1>();
+
+	ASSERT_TRUE(testC1Comps.empty() == false);
+	ASSERT_TRUE(testC1Comps.size() == 5);
+
+	auto testC2Comps = m->getAllComponents<TestC2>();
+
+	ASSERT_TRUE(testC2Comps.empty() == false);
+	ASSERT_TRUE(testC2Comps.size() == 5);
+
+	for (int i = 0; i < 5; i++)
+	{
+		ASSERT_TRUE(testC1Comps.at(i)->getOwnerId() == i);
+		ASSERT_TRUE(testC2Comps.at(i)->getOwnerId() == i);
+	}
+
+	auto testC3Comps = m->getAllComponents<TestC3>();
+
+	ASSERT_TRUE(testC3Comps.empty());
 }
 
 TEST(FUNCTION_TEST, SIGNATURE)
@@ -847,6 +933,46 @@ TEST(FUNCTION_TEST, SYSTEM_ACTIVE_STATE)
     m->update(0);
     
     ASSERT_EQ(e1->getComponent<HealthComponent>()->health, 12);
+}
+
+TEST(FUNCTION_TEST, SYSTEM_GET_ALL_COMPONENTS)
+{
+	m->clear();
+
+	auto e1 = m->createEntity();
+	e1->addComponent<HealthComponent>();
+	e1->addComponent<TestC1>();
+	e1->addComponent<TestC2>();
+	e1->addComponent<TestC3>();
+
+	auto s1 = m->createSystem<TestSystem4>();
+	s1->addComponentType<HealthComponent>();
+	s1->addComponentType<TestC1>();
+	s1->addComponentType<TestC3>();
+
+	auto signature = s1->getSignature();
+
+	ASSERT_TRUE(signature[0] == 1);
+	ASSERT_TRUE(signature[1] == 1);
+	ASSERT_TRUE(signature[2] == 0);
+	ASSERT_TRUE(signature[3] == 1);
+	ASSERT_TRUE(signature[4] == 0);
+
+	unsigned int index = 0;
+
+	for (unsigned int i = 0; i < signature.size(); i++)
+	{
+		auto s = signature[i];
+
+		if (s == 0)
+		{
+			continue;
+		}
+		else
+		{
+			auto components = m->getAllComponents(i);
+		}
+	}
 }
 
 TEST(FUNCTION_TEST, MANGER_UPDATE)
